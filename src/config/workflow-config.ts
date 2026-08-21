@@ -18,6 +18,8 @@ import {
   isJsonObject,
   isUniqueStringArray,
 } from '../types/guards.js';
+import { PLUGIN_PERMISSIONS } from '../contracts/plugin.js';
+import type { PluginPermission } from '../contracts/plugin.js';
 
 export { workflowConfigPath };
 
@@ -134,6 +136,45 @@ export const validateWorkflowConfig = (config: unknown): string[] => {
         errors.push(errorMessage(error));
       }
     });
+  }
+  if (config.plugins !== undefined) {
+    if (!Array.isArray(config.plugins)) {
+      errors.push('workflow.config.json plugins 必须是数组');
+    } else {
+      const pluginIds = new Set<string>();
+      config.plugins.forEach((plugin, index) => {
+        const label = `plugins[${index}]`;
+        if (!isJsonObject(plugin)) {
+          errors.push(`${label} 必须是对象`);
+          return;
+        }
+        const pluginId = typeof plugin.id === 'string' ? plugin.id : '';
+        if (!IDENTIFIER_PATTERN.test(pluginId)) {
+          errors.push(`${label}.id 只能包含小写字母、数字和连字符`);
+        } else if (pluginIds.has(pluginId)) {
+          errors.push(`${label}.id 不能重复：${pluginId}`);
+        } else {
+          pluginIds.add(pluginId);
+        }
+        if (typeof plugin.module !== 'string' || !plugin.module.trim()) {
+          errors.push(`${label}.module 必须是非空字符串`);
+        }
+        if (plugin.enabled !== undefined && typeof plugin.enabled !== 'boolean') {
+          errors.push(`${label}.enabled 必须是布尔值`);
+        }
+        if (plugin.options !== undefined && !isJsonObject(plugin.options)) {
+          errors.push(`${label}.options 必须是 JSON 对象`);
+        }
+        if (plugin.permissions !== undefined) {
+          if (!isUniqueStringArray(plugin.permissions)) {
+            errors.push(`${label}.permissions 必须是不重复的字符串数组`);
+          } else if (plugin.permissions.some((permission) =>
+            !PLUGIN_PERMISSIONS.includes(permission as PluginPermission))) {
+            errors.push(`${label}.permissions 包含未知权限`);
+          }
+        }
+      });
+    }
   }
   return errors;
 };

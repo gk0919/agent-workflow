@@ -17,6 +17,8 @@ const POLICY_STEPS = Object.freeze([
   step('dist/tests/contract/cli-regression.js'),
   step('dist/src/core/profile.js', ['--check']),
   step('dist/tests/contract/profile-regression.js'),
+  step('dist/src/host-node/cli.js'),
+  step('dist/tests/contract/plugin-regression.js'),
   step('dist/src/validators/check-skills.js'),
   step('dist/src/validators/check-workflow-links.js'),
   step('dist/tests/contract/check-js-diff-regression.js'),

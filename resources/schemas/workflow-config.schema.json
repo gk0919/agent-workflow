@@ -18,9 +18,44 @@
         "runtimeRoot": {"$ref": "#/$defs/relativePath"}
       },
       "additionalProperties": false
+    },
+    "plugins": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/plugin"}
     }
   },
   "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "permission": {
+      "enum": [
+        "workspace:read",
+        "workspace:write",
+        "process:spawn",
+        "network:connect",
+        "artifact:read",
+        "artifact:write",
+        "telemetry:emit"
+      ]
+    },
+    "plugin": {
+      "type": "object",
+      "required": ["id", "module"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "module": {"type": "string", "minLength": 1},
+        "enabled": {"type": "boolean", "default": true},
+        "permissions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/permission"},
+          "uniqueItems": true
+        },
+        "options": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
     "relativePath": {
       "type": "string",
       "minLength": 1,

@@ -1,3 +1,5 @@
+import type { PluginConfiguration } from '../contracts/plugin.js';
+
 /** JSON-compatible primitive values accepted by workflow configuration files. */
 export type JsonPrimitive = boolean | null | number | string;
 
@@ -25,6 +27,7 @@ export interface WorkflowConfig {
   $schema?: string;
   activeProfile: string;
   paths: WorkflowPathConfig;
+  plugins?: PluginConfiguration[];
   schemaVersion: 1;
 }
 

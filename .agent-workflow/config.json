@@ -2,6 +2,7 @@
   "$schema": "../resources/schemas/workflow-config.schema.json",
   "schemaVersion": 1,
   "activeProfile": "workflow:resources/profiles/default/profile.json",
+  "plugins": [],
   "paths": {
     "knowledgeRoot": "tests/fixtures/knowledge",
     "skillsRoot": "tests/fixtures/skills",

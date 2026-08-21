@@ -4,6 +4,36 @@
   "private": false,
   "description": "Portable, profile-driven workflow engine for coding agents.",
   "type": "module",
+  "types": "./dist/src/plugin-sdk/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/plugin-sdk/index.d.ts",
+      "import": "./dist/src/plugin-sdk/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/src/contracts/index.d.ts",
+      "import": "./dist/src/contracts/index.js"
+    },
+    "./plugin-sdk": {
+      "types": "./dist/src/plugin-sdk/index.d.ts",
+      "import": "./dist/src/plugin-sdk/index.js"
+    },
+    "./host-node": {
+      "types": "./dist/src/host-node/index.d.ts",
+      "import": "./dist/src/host-node/index.js"
+    },
+    "./host-rpc": {
+      "types": "./dist/src/host-rpc/index.d.ts",
+      "import": "./dist/src/host-rpc/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/src/mcp/index.d.ts",
+      "import": "./dist/src/mcp/index.js"
+    },
+    "./schemas/plugin-manifest.json": "./resources/schemas/plugin-manifest.schema.json",
+    "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "agent-workflow": "./dist/bin/agent-workflow.js"
   },

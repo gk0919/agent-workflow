@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/plugin-manifest.schema.json",
+  "title": "Agent Workflow Plugin Manifest",
+  "type": "object",
+  "required": ["apiVersion", "id", "version", "capabilities"],
+  "properties": {
+    "apiVersion": {"const": 1},
+    "id": {"$ref": "#/$defs/identifier"},
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "description": {"type": "string"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "source-provider",
+          "agent-adapter",
+          "context-provider",
+          "validator",
+          "route-extension",
+          "approval-provider",
+          "artifact-store",
+          "reporter",
+          "tool-provider",
+          "knowledge-provider"
+        ]
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "workspace:read",
+          "workspace:write",
+          "process:spawn",
+          "network:connect",
+          "artifact:read",
+          "artifact:write",
+          "telemetry:emit"
+        ]
+      }
+    },
+    "provides": {
+      "type": "object",
+      "properties": {
+        "services": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/serviceId"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "requires": {
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "services": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/serviceId"}
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "serviceId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[.:/-][a-z0-9]+)*$"
+    }
+  },
+  "additionalProperties": false
+}
