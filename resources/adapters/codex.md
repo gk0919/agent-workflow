@@ -6,7 +6,7 @@
 
 ## 执行方式
 
-- Codex 通过根目录 `AGENTS.md` 进入 `agent-workflow setup` 写入的实际 `START.md` 包路径，用 Router 生成当前阶段 Packet；不预读完整工作流。
+- Codex 通过根目录 `AGENTS.md` 进入 `agent-workflow init` 写入的实际 `START.md` 包路径，用 Router 生成当前阶段 Packet；不预读完整工作流。
 - Provider Entry 使用 Route Packet 的 Active Profile Source 绑定；如果 Connector 未静态展示，先搜索完整工具注册表，不得直接判定未加载。Direct Entry 不搜索或调用 Provider 补全。
 - Portable 业务任务先使用 `portable-resume`，只读取 manifest/source/handoff 当前摘要；确认 Current Stage 后生成实际 Packet。
 - 根据任务类型选择最小充分流程，不对分析、定位或评审任务强制套用完整开发流程。

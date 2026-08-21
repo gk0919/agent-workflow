@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "extends": "tests/fixtures/profiles/cycle-b.json",
+  "id": "cycle-a",
+  "description": "First cycle fixture."
+}

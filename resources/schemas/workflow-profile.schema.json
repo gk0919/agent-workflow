@@ -3,41 +3,14 @@
   "$id": "https://agent-workflow.local/schemas/workflow-profile.schema.json",
   "title": "Agent Workflow Project Profile",
   "type": "object",
-  "required": [
-    "schemaVersion",
-    "id",
-    "description",
-    "taskModel",
-    "sourceProviders",
-    "review",
-    "issueTracking",
-    "evals",
-    "governance",
-    "setup"
-  ],
   "properties": {
     "$schema": {"type": "string"},
     "schemaVersion": {"const": 1},
+    "extends": {"type": "string", "minLength": 1},
     "id": {"$ref": "#/$defs/id"},
     "description": {"type": "string", "minLength": 1},
     "taskModel": {
       "type": "object",
-      "required": [
-        "intentRoutes",
-        "changeIntents",
-        "changeTypes",
-        "changeTypeByIntent",
-        "evolutionaryChangeTypes",
-        "microStages",
-        "changeEntryModes",
-        "expectedIntentEntries",
-        "artifactEntryModes",
-        "sourceTypes",
-        "providerEntryMode",
-        "sourceCaptureStage",
-        "intakeStage",
-        "knownStages"
-      ],
       "properties": {
         "intentRoutes": {
           "type": "object",
@@ -96,20 +69,11 @@
     },
     "review": {
       "type": "object",
-      "required": ["defaultSkill"],
       "properties": {"defaultSkill": {"type": "string"}},
       "additionalProperties": false
     },
     "issueTracking": {
       "type": "object",
-      "required": [
-        "enabled",
-        "pattern",
-        "flags",
-        "requiredForTypes",
-        "enforceEnvironment",
-        "label"
-      ],
       "properties": {
         "enabled": {"type": "boolean"},
         "pattern": {"type": "string"},
@@ -122,7 +86,6 @@
     },
     "evals": {
       "type": "object",
-      "required": ["routeCases"],
       "properties": {
         "routeCases": {"type": "string", "minLength": 1}
       },
@@ -130,14 +93,6 @@
     },
     "governance": {
       "type": "object",
-      "required": [
-        "requiredPaths",
-        "markdownFiles",
-        "markdownRoots",
-        "denyEagerDocs",
-        "forbiddenStagedPatterns",
-        "deprecatedReferences"
-      ],
       "properties": {
         "requiredPaths": {"$ref": "#/$defs/stringList"},
         "markdownFiles": {"$ref": "#/$defs/stringList"},
@@ -150,13 +105,77 @@
     },
     "setup": {
       "type": "object",
-      "required": ["requiredPaths"],
       "properties": {
         "requiredPaths": {"$ref": "#/$defs/stringList"}
       },
       "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {"required": ["extends"]},
+      "then": {
+        "required": ["schemaVersion", "extends", "id", "description"]
+      },
+      "else": {
+        "required": [
+          "schemaVersion",
+          "id",
+          "description",
+          "taskModel",
+          "sourceProviders",
+          "review",
+          "issueTracking",
+          "evals",
+          "governance",
+          "setup"
+        ],
+        "properties": {
+          "taskModel": {
+            "required": [
+              "intentRoutes",
+              "changeIntents",
+              "changeTypes",
+              "changeTypeByIntent",
+              "evolutionaryChangeTypes",
+              "microStages",
+              "changeEntryModes",
+              "expectedIntentEntries",
+              "artifactEntryModes",
+              "sourceTypes",
+              "providerEntryMode",
+              "sourceCaptureStage",
+              "intakeStage",
+              "knownStages"
+            ]
+          },
+          "review": {"required": ["defaultSkill"]},
+          "issueTracking": {
+            "required": [
+              "enabled",
+              "pattern",
+              "flags",
+              "requiredForTypes",
+              "enforceEnvironment",
+              "label"
+            ]
+          },
+          "evals": {"required": ["routeCases"]},
+          "governance": {
+            "required": [
+              "requiredPaths",
+              "markdownFiles",
+              "markdownRoots",
+              "denyEagerDocs",
+              "forbiddenStagedPatterns",
+              "deprecatedReferences"
+            ]
+          },
+          "setup": {"required": ["requiredPaths"]}
+        }
+      }
+    }
+  ],
   "$defs": {
     "id": {
       "type": "string",

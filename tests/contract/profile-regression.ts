@@ -23,11 +23,22 @@ export const main = (): number => {
     const defaultProfile = loadWorkflowProfile(
       'workflow:resources/profiles/default/profile.json',
     );
+    const overlayProfile = loadWorkflowProfile('tests/fixtures/profiles/overlay.json');
     assert.ok(profile.id);
     assert.equal(defaultProfile.id, 'default');
+    assert.equal(overlayProfile.id, 'overlay-test');
+    assert.equal(overlayProfile.issueTracking.label, 'work-item');
+    assert.equal(overlayProfile.issueTracking.enabled, false);
+    assert.deepEqual(overlayProfile.governance.markdownFiles, ['AGENTS.md']);
+    assert.deepEqual(overlayProfile.taskModel, defaultProfile.taskModel);
     assert.deepEqual(validateWorkflowConfig(config), []);
     assert.deepEqual(validateWorkflowProfile(profile), []);
     assert.deepEqual(validateWorkflowProfile(defaultProfile), []);
+    assert.deepEqual(validateWorkflowProfile(overlayProfile), []);
+    assert.throws(
+      () => loadWorkflowProfile('tests/fixtures/profiles/cycle-a.json'),
+      /extends 存在循环/,
+    );
     const activeIssueRule = buildIssueTrackingRule(profile);
     assert.equal(activeIssueRule.enabled, profile.issueTracking.enabled);
     assert.equal(

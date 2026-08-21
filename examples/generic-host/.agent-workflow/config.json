@@ -1,0 +1,12 @@
+{
+  "$schema": "../node_modules/@gk0919/agent-workflow/resources/schemas/workflow-config.schema.json",
+  "schemaVersion": 1,
+  "activeProfile": ".agent-workflow/profile/profile.json",
+  "plugins": [],
+  "paths": {
+    "knowledgeRoot": ".agent-workflow/profile/knowledge",
+    "skillsRoot": ".agents/skills",
+    "tasksRoot": ".agent-workflow/tasks/local",
+    "runtimeRoot": ".agent-workflow/runtime"
+  }
+}

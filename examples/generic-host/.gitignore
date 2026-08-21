@@ -1,0 +1,9 @@
+# ai-workflow:local-state:start
+.agent-workflow/runtime/*
+!.agent-workflow/runtime/README.md
+.agent-workflow/tasks/local/
+.worktrees/
+# ai-workflow:local-state:end
+
+node_modules/
+coverage/

@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../resources/schemas/workflow-profile.schema.json",
+  "schemaVersion": 1,
+  "extends": "workflow:resources/profiles/default/profile.json",
+  "id": "overlay-test",
+  "description": "Project overlay used by the Profile contract regression.",
+  "issueTracking": {
+    "label": "work-item"
+  },
+  "governance": {
+    "markdownFiles": ["AGENTS.md"]
+  }
+}

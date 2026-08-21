@@ -6,7 +6,7 @@
 
 每个适配器都必须引导执行者按 `START.md` 生成 Route Packet：
 
-1. 所有任务只启动 `AGENTS.md` 及 `agent-workflow setup` 写入的实际 `START.md` / `ROUTER.md` 包路径。
+1. 新宿主先由 `agent-workflow init` 生成根入口和 Host 契约；所有任务只启动 `AGENTS.md` 及其中实际 `START.md` / `ROUTER.md` 包路径。
 2. 使用 `workflow:route` 选择 Route/Stage/Entry，优先 `--materialize` 合并当前阶段卡
    和命中 Skill；超限时按 Packet 白名单读取。
 3. 复用 Packet 输出的匿名 Run ID；Micro Change 重复提交结构化 Gate 事实，并从 Review 起
@@ -15,7 +15,8 @@
 5. 完整 `README.md`、Source Capture、项目策略、Adapter 和 Reference 只在当前卡明确要求时读取。
 6. Portable 任务先使用 `portable-resume`，读取状态摘要后切换实际路由。
 
-如果工具不能自动发现仓库规则，应使用 `agent-workflow setup` 安装薄入口；仍不支持时，运行 `agent-workflow setup --agent generic` 输出与安装位置一致的启动提示。
+`agent-workflow setup` 只安装工具薄入口；如果工具不能自动发现仓库规则，运行
+`agent-workflow setup --agent generic` 输出与安装位置一致的启动提示。
 
 工作流维护、工具配置和纯 Git 操作使用独立 Route，不加载业务 Source，也不伪造 Source Snapshot。
 

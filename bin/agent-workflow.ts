@@ -26,6 +26,8 @@ const command = (script: string, prefixArguments: string[] = []): CommandTarget 
 });
 const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'cli:test': command('dist/tests/contract/cli-regression.js'),
+  init: command('dist/src/cli/init.js'),
+  'init:test': command('dist/tests/contract/init-regression.js'),
   setup: command('dist/src/cli/setup.js'),
   profile: command('dist/src/core/profile.js'),
   'profile:test': command('dist/tests/contract/profile-regression.js'),
@@ -132,8 +134,8 @@ const main = async (): Promise<number> => {
     return result.status ?? 1;
   };
 
-  // Setup precedes workspace configuration; plugin checks own their lifecycle.
-  if (commandName === 'setup' || commandName === 'source:capture' ||
+  // Init precedes workspace configuration; setup and plugin checks own their lifecycle.
+  if (commandName === 'init' || commandName === 'setup' || commandName === 'source:capture' ||
       commandName.startsWith('plugins:')) {
     return runCommand();
   }

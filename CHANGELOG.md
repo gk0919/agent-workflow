@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- 增加 `agent-workflow init`，安全生成宿主配置、Profile 覆盖层、目录、根入口、忽略规则和 npm scripts。
+- Profile 支持带循环、深度和路径门禁的 `extends` 递归覆盖；对象合并，数组替换。
+- 补齐工作流 npm script 契约，并增加可复制、可回归的 `examples/generic-host/`。
+- 将项目专属兼容内容移出通用可移植文档。
+
 ## 1.0.0
 
 - 将通用工作流引擎与项目 Profile、任务产物和运行状态物理分离。

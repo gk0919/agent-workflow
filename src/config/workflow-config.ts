@@ -31,6 +31,22 @@ const RELATIVE_PATH_FIELDS: WorkflowPathKey[] = [
   'tasksRoot',
 ];
 const WORKFLOW_LOCATOR_PREFIX = 'workflow:';
+const PROFILE_EXTENSION_MAX_DEPTH = 8;
+const PROFILE_EXTENSION_KEYS = new Set([
+  '$schema',
+  'description',
+  'evals',
+  'extends',
+  'governance',
+  'id',
+  'issueTracking',
+  'review',
+  'schemaVersion',
+  'setup',
+  'sourceProviders',
+  'taskModel',
+]);
+const UNSAFE_MERGE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 const stringArrayProperty = (value: UnknownRecord, key: string): string[] =>
   isUniqueStringArray(value[key]) ? value[key] : [];
@@ -203,6 +219,55 @@ const validateStringMap = (
       errors.push(`${label} 包含非法映射：${key}`);
     }
   });
+};
+
+const validateWorkflowProfileExtension = (profile: UnknownRecord): string[] => {
+  const errors: string[] = [];
+  if (profile.schemaVersion !== 1) {
+    errors.push('Workflow Profile extension schemaVersion 必须为 1');
+  }
+  if (typeof profile.extends !== 'string' || !profile.extends) {
+    errors.push('Workflow Profile extension 缺少 extends');
+  } else {
+    try {
+      resolveWorkflowLocator(profile.extends, 'extends');
+    } catch (error: unknown) {
+      errors.push(errorMessage(error));
+    }
+  }
+  if (!IDENTIFIER_PATTERN.test(typeof profile.id === 'string' ? profile.id : '')) {
+    errors.push('Workflow Profile extension id 只能包含小写字母、数字和连字符');
+  }
+  if (typeof profile.description !== 'string' || !profile.description) {
+    errors.push('Workflow Profile extension 缺少 description');
+  }
+  Object.keys(profile).forEach((key) => {
+    if (!PROFILE_EXTENSION_KEYS.has(key)) {
+      errors.push(`Workflow Profile extension 包含未知字段：${key}`);
+    }
+  });
+  return errors;
+};
+
+/** Objects merge recursively while arrays and scalar values replace inherited values. */
+const mergeWorkflowProfile = (
+  base: UnknownRecord,
+  extension: UnknownRecord,
+): UnknownRecord => {
+  const merged: UnknownRecord = structuredClone(base);
+  Object.entries(extension).forEach(([key, value]) => {
+    if (key === 'extends') {
+      return;
+    }
+    if (UNSAFE_MERGE_KEYS.has(key)) {
+      throw new Error(`Workflow Profile extension 包含不安全字段：${key}`);
+    }
+    const inherited = merged[key];
+    merged[key] = isJsonObject(inherited) && isJsonObject(value)
+      ? mergeWorkflowProfile(inherited, value)
+      : structuredClone(value);
+  });
+  return merged;
 };
 
 /** Validates project vocabulary and bindings without executing those bindings. */
@@ -422,16 +487,47 @@ export const validateWorkflowProfile = (profile: unknown): string[] => {
   return errors;
 };
 
-/** Loads a workspace-contained Profile and rejects invalid project bindings. */
-export const loadWorkflowProfile = (profilePath: string): WorkflowProfile => {
+const loadWorkflowProfileInternal = (
+  profilePath: string,
+  inheritancePath: readonly string[],
+): WorkflowProfile => {
   const resolvedPath = resolveWorkflowLocator(profilePath, 'activeProfile');
-  const profile = readJson(resolvedPath, 'Workflow Profile');
+  if (inheritancePath.includes(resolvedPath)) {
+    const cycle = [...inheritancePath, resolvedPath]
+      .map((filePath) => path.relative(workspaceRoot, filePath) || '.')
+      .join(' -> ');
+    throw new Error(`Workflow Profile extends 存在循环：${cycle}`);
+  }
+  if (inheritancePath.length >= PROFILE_EXTENSION_MAX_DEPTH) {
+    throw new Error(`Workflow Profile extends 最多允许 ${PROFILE_EXTENSION_MAX_DEPTH} 层`);
+  }
+
+  const source = readJson(resolvedPath, 'Workflow Profile');
+  if (!isJsonObject(source)) {
+    throw new Error('Workflow Profile 必须是对象');
+  }
+  let profile: unknown = source;
+  if (source.extends !== undefined) {
+    const extensionErrors = validateWorkflowProfileExtension(source);
+    if (extensionErrors.length > 0) {
+      throw new Error(extensionErrors.join('；'));
+    }
+    const inheritedProfile = loadWorkflowProfileInternal(
+      source.extends as string,
+      [...inheritancePath, resolvedPath],
+    );
+    profile = mergeWorkflowProfile(inheritedProfile as unknown as UnknownRecord, source);
+  }
   const errors = validateWorkflowProfile(profile);
   if (errors.length > 0) {
     throw new Error(errors.join('；'));
   }
   return profile as WorkflowProfile;
 };
+
+/** Loads, resolves and validates a workspace-contained Profile inheritance chain. */
+export const loadWorkflowProfile = (profilePath: string): WorkflowProfile =>
+  loadWorkflowProfileInternal(profilePath, []);
 
 /** Returns the configured Profile, with an explicit process-local migration override. */
 export const activeProfilePathFor = (config = loadWorkflowConfig()): string =>

@@ -21,9 +21,11 @@ npm install --save-dev ./gk0919-agent-workflow-1.0.0.tgz
 # 同级仓库开发时使用 npm file dependency
 npm install --save-dev ../agent-workflow
 
-# 生成/检查当前项目的 Agent 薄入口
-npx agent-workflow setup --agent auto
-npx agent-workflow setup --agent auto --check
+# 初始化宿主契约，再生成/检查当前项目的 Agent 薄入口
+npm exec --no -- agent-workflow init
+npm run workflow:setup
+npm run workflow:init:check
+npm run workflow:setup:check
 ```
 
 宿主项目应把包声明在 `devDependencies`，脚本只调用 `agent-workflow <command>`。不要引用 `node_modules` 中的 `src/` 文件，也不要复制 Core。GitHub Packages 的发布配置已声明，但 `npm publish`、Release、Tag 和推送都需要独立授权。
@@ -148,20 +150,31 @@ Source Capture -> Intake -> PRD -> Spec -> Plan -> Implement -> Review -> Verify
 
 ## 自动接入与备用启动
 
-项目接入由公开 CLI 的 `setup` 命令管理。CLI 基于 Node.js，可在 Windows、macOS 和 Linux 运行；它只新增或更新带 `ai-workflow:bootstrap` 标记的薄入口，不覆盖 Agent 文件中的其他配置。`src/` 是包内实现，不属于项目集成契约。
+项目初始化由公开 CLI 的 `init` 命令管理。它生成 Host Config、继承式项目 Profile、目录、
+`.gitignore` 本地状态区块、根 `AGENTS.md` 启动区块和完整 npm scripts；已有项目文件只增补受管区块，
+配置文件存在时保留原文，script 冲突时停止并要求人工处理。`setup` 随后只管理工具薄入口。
+CLI 基于 Node.js，可在 Windows、macOS 和 Linux 运行；`src/` 是包内实现，不属于项目集成契约。
 
 ```sh
+# 首次初始化；之后可在 CI 中检查漂移
+npm exec --no -- agent-workflow init
+npm run workflow:init:check
+
 # 自动检测仓库中正在使用的 Agent 配置
-agent-workflow setup --agent auto
+npm run workflow:setup
 
 # 预览全部支持项，不写文件
-agent-workflow setup --agent all --dry-run
+npm exec --no -- agent-workflow setup --agent all --dry-run
 
 # 检查入口是否有效
-agent-workflow setup --agent auto --check
+npm run workflow:setup:check
 ```
 
 Codex、Qoder 和支持 `AGENTS.md` 的 TRAE 版本直接复用根目录入口。Claude Code、GitHub Copilot 和 Cursor 使用各自的薄入口。工具没有自动发现能力时，运行 `agent-workflow setup --agent generic` 获取与当前安装位置一致的启动提示；不要手工猜测包路径。
+
+项目 Profile 可通过 `extends: "workflow:resources/profiles/default/profile.json"` 只声明差异；
+对象递归合并，数组整体替换，继承环和越界路径会被拒绝。可复制且参与契约回归的完整宿主见
+[`examples/generic-host/`](./examples/generic-host/README.md)。
 
 启动后运行 `workflow:route` 并输出紧凑 Route Packet；阶段切换时重新生成，一次只加载当前阶段卡。默认使用 `--materialize` 在 4000 字符工具输出上限内合并阶段卡和选中 Skill；深度文档通过 `--reference <path#heading>` 只选当前阶段白名单章节。完整结果超限时按阶段卡、Skill、Reference 的顺序物化可完整容纳的文档，并明确列出剩余项；不截断单份文档。只有首份阶段文档仍无法容纳时才回退为普通 Packet。
 

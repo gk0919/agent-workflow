@@ -1,0 +1,35 @@
+{
+  "name": "generic-host",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "quality:all": "agent-workflow quality:all",
+    "quality:hooks:check": "agent-workflow quality:hooks --check",
+    "quality:hooks:setup": "agent-workflow quality:hooks",
+    "quality:js": "agent-workflow quality:js",
+    "quality:policy": "agent-workflow quality:policy",
+    "quality:skills": "agent-workflow quality:skills",
+    "quality:staged": "agent-workflow quality:staged",
+    "quality:tasks": "agent-workflow quality:tasks",
+    "quality:workflow": "agent-workflow quality:workflow",
+    "workflow:classify": "agent-workflow classify",
+    "workflow:context": "agent-workflow context",
+    "workflow:feedback": "agent-workflow feedback",
+    "workflow:init": "agent-workflow init",
+    "workflow:init:check": "agent-workflow init --check",
+    "workflow:knowledge": "agent-workflow knowledge",
+    "workflow:next": "agent-workflow next",
+    "workflow:profile": "agent-workflow profile --check",
+    "workflow:retention": "agent-workflow retention",
+    "workflow:route": "agent-workflow route",
+    "workflow:setup": "agent-workflow setup --agent auto",
+    "workflow:setup:check": "agent-workflow setup --agent auto --check",
+    "workflow:task": "agent-workflow task",
+    "workflow:verify:ci": "agent-workflow verify:ci",
+    "workflow:verify:contract": "agent-workflow verify:contract",
+    "workflow:worktree": "agent-workflow worktree"
+  },
+  "devDependencies": {
+    "@gk0919/agent-workflow": "file:../.."
+  }
+}

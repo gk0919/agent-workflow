@@ -17,6 +17,8 @@ import {
   workflowRoot,
   workspaceRoot,
 } from '../config/workspace-paths.js';
+import { BOOTSTRAP_BLOCK, buildBootstrapBlock } from './bootstrap.js';
+import { hasExactManagedBlock, updateManagedBlock } from './managed-block.js';
 import { errorMessage } from '../types/guards.js';
 
 const supportedAgents = new Set(['auto', 'all', ...TOOL_TARGET_NAMES]);
@@ -38,17 +40,7 @@ const qualityScripts = [
   'syntax-check.js',
   'policy-check.js',
 ].map((fileName) => path.join(workflowRoot, 'dist', 'src', 'validators', fileName));
-const managedStart = '<!-- ai-workflow:bootstrap:start -->';
-const managedEnd = '<!-- ai-workflow:bootstrap:end -->';
-const managedBlock = [
-  managedStart,
-  '## AI Workflow Bootstrap',
-  '',
-  `处理本仓库中的任何任务前，必须先读取并遵守 \`${workflowEntryReference}\`。`,
-  '',
-  '本文件只负责自动启动工作流，不复制或覆盖 `AGENTS.md`、`.agent-workflow/` 中的项目约束，也不保存任务状态。',
-  managedEnd
-].join('\n');
+const managedBlock = buildBootstrapBlock(workflowEntryReference);
 
 interface SetupOptions {
   agents: string[];
@@ -145,21 +137,12 @@ const readUtf8 = (targetPath: string): string => fs.readFileSync(targetPath, 'ut
 const displayPath = (targetPath: string): string =>
   path.relative(repositoryRoot, targetPath).split(path.sep).join('/');
 
-const escapeRegExp = (value: string): string =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const managedBlockPattern = new RegExp(
-  `${escapeRegExp(managedStart)}[\\s\\S]*?${escapeRegExp(managedEnd)}`,
-  'g',
-);
-
 const hasWorkflowReference = (targetPath: string): boolean => {
   if (!exists(targetPath) || !fs.statSync(targetPath).isFile()) {
     return false;
   }
 
-  const content = readUtf8(targetPath);
-  const blocks = content.match(managedBlockPattern) ?? [];
-  return blocks.length === 1 && blocks[0] === managedBlock;
+  return hasExactManagedBlock(readUtf8(targetPath), managedBlock, BOOTSTRAP_BLOCK);
 };
 
 let missingCount = 0;
@@ -186,26 +169,13 @@ const setManagedBridge = (targetPath: string, header = ''): void => {
   fs.mkdirSync(directory, { recursive: true });
 
   const existingContent = exists(targetPath) ? readUtf8(targetPath) : '';
-  const startMarkerCount = existingContent.split(managedStart).length - 1;
-  const endMarkerCount = existingContent.split(managedEnd).length - 1;
-  if (startMarkerCount !== endMarkerCount || startMarkerCount > 1) {
-    throw new Error(`Refusing to update malformed managed block in ${relativePath}`);
+  let update;
+  try {
+    update = updateManagedBlock(existingContent, managedBlock, BOOTSTRAP_BLOCK, header);
+  } catch (error: unknown) {
+    throw new Error(`Refusing to update malformed managed block in ${relativePath}: ${errorMessage(error)}`);
   }
-
-  let nextContent: string;
-
-  if (startMarkerCount === 1) {
-    nextContent = existingContent.replace(managedBlockPattern, managedBlock);
-  }
-  else if (existingContent.trim().length === 0) {
-    const prefix = header.trim().length === 0 ? '' : `${header.trimEnd()}\n\n`;
-    nextContent = `${prefix}${managedBlock}\n`;
-  }
-  else {
-    nextContent = `${managedBlock}\n\n${existingContent.trimStart()}`;
-  }
-
-  fs.writeFileSync(targetPath, nextContent, 'utf8');
+  fs.writeFileSync(targetPath, update.content, 'utf8');
   console.log(`[updated] ${relativePath} is connected`);
 };
 

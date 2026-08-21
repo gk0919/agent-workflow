@@ -29,6 +29,7 @@ export const main = (): number => {
     const help = runCli(['--help']);
     assert.equal(help.status, 0);
     assert.match(help.stdout, /Usage: agent-workflow <command>/);
+    assert.match(help.stdout, /\n  init\n/);
     assert.match(help.stdout, /quality:policy/);
 
     const unknown = runCli(['unknown-command']);

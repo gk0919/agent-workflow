@@ -15,6 +15,7 @@ const step = (script: string, argumentsList: string[] = []): PolicyStep => ({
 const POLICY_STEPS = Object.freeze([
   step('dist/src/validators/syntax-check.js'),
   step('dist/tests/contract/cli-regression.js'),
+  step('dist/tests/contract/init-regression.js'),
   step('dist/src/core/profile.js', ['--check']),
   step('dist/tests/contract/profile-regression.js'),
   step('dist/src/host-node/cli.js'),
