@@ -179,6 +179,7 @@ const standardImplementManifest = `# Task Manifest
 
 const standardArtifacts = {
   'intake.md': '# Intake',
+  'plan.md': '# Plan',
   'source.md': '# Source',
   'spec.md': `---
 status: confirmed
@@ -1221,6 +1222,18 @@ export const main = () => {
     });
     assert.ok(validTaskGate);
     assert.equal(validTaskGate.currentStage, 'Implement');
+    assert.throws(
+      () => validateRouteTaskState({
+        artifacts: { ...standardArtifacts, 'plan.md': undefined },
+        entry: 'direct',
+        manifestContent: standardImplementManifest,
+        route: 'standard-change',
+        runId: 'run-0123456789abcdef',
+        stage: 'implement',
+        taskId: '20260728-route-guard-regression',
+      }),
+      /缺少或未填写最小 Spec 包文件 plan\.md/,
+    );
     const validAnalysisTaskGate = validateRouteTaskState({
       entry: 'direct',
       manifestContent: analysisManifest,

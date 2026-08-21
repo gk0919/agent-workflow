@@ -148,7 +148,7 @@ export const validateRouteTaskState = ({
   }
 
   if (route === 'standard-change' && taskRequired) {
-    ['source.md', 'intake.md', 'spec.md'].forEach((fileName) => {
+    ['source.md', 'intake.md', 'spec.md', 'plan.md'].forEach((fileName) => {
       const artifact = artifacts[fileName];
       if (typeof artifact !== 'string' || !artifact.trim()) {
         throw taskGateError(`标准实施前缺少或未填写最小 Spec 包文件 ${fileName}`);

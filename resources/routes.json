@@ -425,6 +425,18 @@
       "reasonCodes": ["workflow-maintenance"],
       "disallowedRiskFlags": [],
       "onFailure": "停止写入，报告失败的静态门禁和最小恢复动作",
+      "taskFlow": {
+        "stages": ["Inspect", "Implement", "Review", "Verify", "Git Inspect"],
+        "optionalStages": [],
+        "transitions": {
+          "Inspect": ["Implement"],
+          "Implement": ["Review"],
+          "Review": ["Verify"],
+          "Verify": ["Git Inspect"],
+          "Git Inspect": ["complete"]
+        }
+      },
+      "taskRequiredStages": ["implement", "review", "verify", "git-inspect"],
       "references": [
         "workflow:README.md#启动与任务分流",
         "workflow:README.md#运行反馈与经验晋升",
@@ -436,6 +448,7 @@
       "stages": {
         "inspect": {
           "docs": ["workflow:resources/cards/workflow-maintenance.md"],
+          "taskStages": ["Inspect"],
           "references": [
             "workflow:README.md#启动与任务分流",
             "workflow:README.md#运行反馈与经验晋升",
@@ -448,11 +461,13 @@
         },
         "implement": {
           "docs": ["workflow:resources/cards/implement.md"],
+          "taskStages": ["Implement"],
           "references": ["workflow:docs/10-instructions-as-code.md"],
           "next": "修改工作流或检查器"
         },
         "review": {
           "docs": ["workflow:resources/cards/review.md"],
+          "taskStages": ["Review"],
           "references": [
             "workflow:docs/10-instructions-as-code.md",
             "workflow:resources/adapters/README.md"
@@ -461,11 +476,13 @@
         },
         "verify": {
           "docs": ["workflow:resources/cards/verify.md"],
+          "taskStages": ["Verify"],
           "references": ["workflow:README.md#质量门禁"],
           "next": "运行 workflow policy 和路由用例"
         },
         "git-inspect": {
           "docs": ["workflow:resources/cards/git-inspect.md"],
+          "taskStages": ["Git Inspect"],
           "next": "报告工作流文件的仓库状态和任务专属 diff"
         }
       }
