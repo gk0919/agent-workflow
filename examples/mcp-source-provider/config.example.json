@@ -1,0 +1,34 @@
+{
+  "$schema": "../node_modules/@gk0919/agent-workflow/resources/schemas/workflow-config.schema.json",
+  "schemaVersion": 1,
+  "activeProfile": "workflow:resources/profiles/default/profile.json",
+  "plugins": [
+    {
+      "id": "mcp-source-provider",
+      "module": "@gk0919/agent-workflow/examples/mcp-source-provider",
+      "permissions": ["network:connect", "secrets:read"],
+      "options": {
+        "endpoint": "http://192.168.129.30:9090/mcp/dev",
+        "allowInsecureHttp": true,
+        "tokenEnv": "JACKYUN_MCP_TOKEN",
+        "sourceType": "jackyun-mcp",
+        "routes": {
+          "requirement": {
+            "tool": "query_requirement",
+            "referencePattern": "^XQ"
+          },
+          "defect": {
+            "tool": "query_bug",
+            "referencePattern": "^BG"
+          }
+        }
+      }
+    }
+  ],
+  "paths": {
+    "knowledgeRoot": ".agent-workflow/profile/knowledge",
+    "skillsRoot": ".agents/skills",
+    "tasksRoot": ".agent-workflow/tasks/local",
+    "runtimeRoot": ".agent-workflow/runtime"
+  }
+}

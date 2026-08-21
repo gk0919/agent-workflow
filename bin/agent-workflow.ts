@@ -31,6 +31,7 @@ const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'profile:test': command('dist/tests/contract/profile-regression.js'),
   'plugins:check': command('dist/src/host-node/cli.js'),
   'plugins:test': command('dist/tests/contract/plugin-regression.js'),
+  'source:capture': command('dist/src/host-node/source-capture-cli.js'),
   classify: command('dist/src/core/classify-route.js'),
   route: command('dist/src/core/route.js'),
   next: command('dist/src/core/workflow-next.js'),
@@ -132,7 +133,8 @@ const main = async (): Promise<number> => {
   };
 
   // Setup precedes workspace configuration; plugin checks own their lifecycle.
-  if (commandName === 'setup' || commandName.startsWith('plugins:')) {
+  if (commandName === 'setup' || commandName === 'source:capture' ||
+      commandName.startsWith('plugins:')) {
     return runCommand();
   }
   try {

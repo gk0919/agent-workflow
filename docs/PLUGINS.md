@@ -76,6 +76,12 @@ Normal CLI commands activate the host around command execution and emit only
 are intentionally excluded. Programmatic consumers resolve capability services
 from `createNodePluginHost()`.
 
+The package also includes a runnable MCP `source-provider` example and a generic
+capture command. See
+[`examples/mcp-source-provider/README.md`](../examples/mcp-source-provider/README.md)
+for secure environment-variable authentication, route mapping and exact source
+capture with `agent-workflow source:capture`.
+
 ## Contract rules
 
 - A configured id must match the module Manifest id.

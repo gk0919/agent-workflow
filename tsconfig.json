@@ -20,6 +20,7 @@
   },
   "include": [
     "bin/**/*.ts",
+    "examples/**/*.ts",
     "scripts/**/*.ts",
     "src/**/*.ts",
     "tests/**/*.ts"

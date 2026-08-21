@@ -42,6 +42,7 @@ export const PLUGIN_PERMISSIONS = [
   'workspace:write',
   'process:spawn',
   'network:connect',
+  'secrets:read',
   'artifact:read',
   'artifact:write',
   'telemetry:emit',

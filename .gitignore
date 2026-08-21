@@ -1,6 +1,7 @@
 dist/
 artifacts/
 node_modules/
+.env
 .agent-workflow/runtime/*
 !.agent-workflow/runtime/README.md
 .agent-workflow/tasks/local/
