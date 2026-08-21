@@ -185,6 +185,7 @@ export const guardRouteTask = (
     artifacts: taskDirectory
       ? {
         'intake.md': readArtifact(taskDirectory, 'intake.md'),
+        'plan.md': readArtifact(taskDirectory, 'plan.md'),
         'source.md': readArtifact(taskDirectory, 'source.md'),
         'spec.md': readArtifact(taskDirectory, 'spec.md'),
       }
