@@ -1,0 +1,69 @@
+name: Package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate on Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22, 24]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check TypeScript
+        run: npm run typecheck
+      - name: Run policy checks
+        run: npm run quality:policy
+
+  pack:
+    name: Build npm package
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Pack
+        run: npm run pack:artifact
+      - name: Smoke test packed CLI
+        shell: bash
+        run: |
+          package_file=$(find artifacts -maxdepth 1 -name '*.tgz' -print -quit)
+          test -n "$package_file"
+          npm install --global "$package_file" --prefix "$RUNNER_TEMP/agent-workflow-smoke"
+          "$RUNNER_TEMP/agent-workflow-smoke/bin/agent-workflow" --version
+      - name: Upload npm package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: artifacts/*.tgz
+          archive: false
+          if-no-files-found: error
+          retention-days: 30

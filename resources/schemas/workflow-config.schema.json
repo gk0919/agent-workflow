@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/workflow-config.schema.json",
+  "title": "Agent Workflow Host Configuration",
+  "type": "object",
+  "required": ["schemaVersion", "activeProfile", "paths"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schemaVersion": {"const": 1},
+    "activeProfile": {"$ref": "#/$defs/relativePath"},
+    "paths": {
+      "type": "object",
+      "required": ["knowledgeRoot", "skillsRoot", "tasksRoot", "runtimeRoot"],
+      "properties": {
+        "knowledgeRoot": {"$ref": "#/$defs/relativePath"},
+        "skillsRoot": {"$ref": "#/$defs/relativePath"},
+        "tasksRoot": {"$ref": "#/$defs/relativePath"},
+        "runtimeRoot": {"$ref": "#/$defs/relativePath"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:[\\\\/])(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+$"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,532 @@
+{
+  "version": 6,
+  "baseDocs": [
+    "AGENTS.md",
+    "workflow:docs/START.md",
+    "workflow:docs/ROUTER.md"
+  ],
+  "globalReferences": [
+    "workflow:docs/security-boundaries.md",
+    "workflow:resources/cards/worktree.md"
+  ],
+  "limits": {
+    "alwaysOnMaxChars": 6500,
+    "cardMaxChars": 2000,
+    "routePacketReserveChars": 1300,
+    "toolOutputDefaultChars": 6000,
+    "routeWarningRemainingRatio": 0.2
+  },
+  "microChangeGate": {
+    "repositories": 1,
+    "minFiles": 1,
+    "maxFiles": 2,
+    "minSemanticLines": 1,
+    "maxSemanticLines": 20
+  },
+  "verificationContract": {
+    "version": 1,
+    "requiredForSpecsCreatedOnOrAfter": "2026-07-30T00:00:00+08:00"
+  },
+  "riskCatalog": [
+    "interface-change",
+    "data-model-change",
+    "permission-change",
+    "security-boundary",
+    "public-chain",
+    "async-lifecycle",
+    "high-risk-action",
+    "migration",
+    "ui-ambiguity",
+    "scope-unknown",
+    "multi-repository",
+    "large-diff",
+    "new-business-state",
+    "new-interaction-pattern",
+    "compatibility-unknown",
+    "release-coordination",
+    "prompt-injection",
+    "external-write",
+    "tool-budget-exceeded"
+  ],
+  "denyEagerDocs": [
+    "workflow:README.md",
+    "workflow:docs/source-capture.md",
+    "workflow:docs/micro-change.md"
+  ],
+  "routes": {
+    "pool-capture": {
+      "entryModes": ["pool"],
+      "budgetChars": 12500,
+      "skillReserveChars": 1800,
+      "reasonCodes": ["pool-read-request"],
+      "disallowedRiskFlags": [],
+      "onFailure": "保持只读，报告 blocked-at-entry 和缺失事实",
+      "references": [
+        "workflow:docs/source-capture.md#entry-gate",
+        "workflow:docs/source-capture.md#pool-entry"
+      ],
+      "stages": {
+        "capture": {
+          "docs": ["workflow:resources/cards/source-lite.md"],
+          "references": [
+            "workflow:docs/source-capture.md#entry-gate",
+            "workflow:docs/source-capture.md#pool-entry"
+          ],
+          "next": "使用缺陷池 Skill 读取本地事实并形成 Source Lite"
+        },
+        "report": {
+          "docs": ["workflow:resources/cards/report.md"],
+          "next": "报告查询结果或等待用户选择"
+        }
+      }
+    },
+    "micro-change": {
+      "entryModes": ["direct", "pool"],
+      "budgetChars": 14000,
+      "skillReserveChars": 2000,
+      "reasonCodes": ["explicit-low-risk-micro-change"],
+      "stagePaths": {
+        "defect": [
+          "locate-defect",
+          "implement",
+          "review-defect",
+          "verify-defect",
+          "git-inspect"
+        ],
+        "requirement": [
+          "locate-requirement",
+          "implement",
+          "review-requirement",
+          "verify-requirement",
+          "git-inspect"
+        ]
+      },
+      "disallowedRiskFlags": [
+        "interface-change",
+        "data-model-change",
+        "permission-change",
+        "security-boundary",
+        "public-chain",
+        "async-lifecycle",
+        "high-risk-action",
+        "migration",
+        "ui-ambiguity",
+        "scope-unknown",
+        "multi-repository",
+        "large-diff",
+        "new-business-state",
+        "new-interaction-pattern",
+        "compatibility-unknown",
+        "release-coordination",
+        "prompt-injection",
+        "external-write",
+        "tool-budget-exceeded"
+      ],
+      "onFailure": "切换 standard-change/capture，保留已确认的任务事实",
+      "references": [
+        "workflow:docs/micro-change.md",
+        "workflow:docs/verification-contract.md#micro-change",
+        "workflow:docs/05-execution.md",
+        "workflow:docs/06-review.md",
+        "workflow:docs/07-verify.md",
+        "workflow:docs/08-git.md"
+      ],
+      "stages": {
+        "locate-defect": {
+          "docs": [
+            "workflow:resources/cards/source-lite.md",
+            "workflow:resources/cards/micro-change.md",
+            "workflow:resources/cards/implementation-approval.md",
+            "workflow:resources/cards/intent-defect.md"
+          ],
+          "references": [
+            "workflow:docs/micro-change.md",
+            "workflow:docs/verification-contract.md#micro-change"
+          ],
+          "next": "提交设计根因、责任层、最小完整修改和验证项，等待用户批准"
+        },
+        "locate-requirement": {
+          "docs": [
+            "workflow:resources/cards/source-lite.md",
+            "workflow:resources/cards/micro-change.md",
+            "workflow:resources/cards/implementation-approval.md",
+            "workflow:resources/cards/intent-requirement.md"
+          ],
+          "references": [
+            "workflow:docs/micro-change.md",
+            "workflow:docs/verification-contract.md#micro-change"
+          ],
+          "next": "提交需求不变量、责任层、最小完整修改和验证项，等待用户批准"
+        },
+        "implement": {
+          "docs": ["workflow:resources/cards/implement.md", "workflow:resources/cards/micro-change.md"],
+          "references": [
+            "workflow:docs/05-execution.md"
+          ],
+          "next": "实施消除根因的最小完整修改；按变更意图进入对应 Review"
+        },
+        "review-defect": {
+          "docs": ["workflow:resources/cards/review.md", "workflow:resources/cards/intent-defect.md"],
+          "references": [
+            "workflow:docs/06-review.md"
+          ],
+          "next": "按缺陷根因与回归点审查任务专属 patch"
+        },
+        "review-requirement": {
+          "docs": [
+            "workflow:resources/cards/review.md",
+            "workflow:resources/cards/intent-requirement.md"
+          ],
+          "references": [
+            "workflow:docs/06-review.md"
+          ],
+          "next": "按验收、兼容与默认状态审查任务专属 patch"
+        },
+        "verify-defect": {
+          "docs": ["workflow:resources/cards/verify.md", "workflow:resources/cards/intent-defect.md"],
+          "references": [
+            "workflow:docs/07-verify.md"
+          ],
+          "next": "验证原问题、关键边界和回归点"
+        },
+        "verify-requirement": {
+          "docs": [
+            "workflow:resources/cards/verify.md",
+            "workflow:resources/cards/intent-requirement.md"
+          ],
+          "references": [
+            "workflow:docs/07-verify.md"
+          ],
+          "next": "验证验收条件、兼容场景与状态边界"
+        },
+        "git-inspect": {
+          "docs": ["workflow:resources/cards/git-inspect.md"],
+          "references": ["workflow:docs/08-git.md"],
+          "next": "按仓库报告 status 和语义 diff"
+        }
+      }
+    },
+    "standard-change": {
+      "entryModes": ["direct", "pool"],
+      "budgetChars": 15200,
+      "skillReserveChars": 3500,
+      "reasonCodes": ["business-change"],
+      "disallowedRiskFlags": [],
+      "onFailure": "停止当前阶段，记录 blocker、验证缺口和所需授权",
+      "taskFlow": {
+        "stages": [
+          "Source Capture",
+          "Intake",
+          "PRD",
+          "Spec",
+          "Plan",
+          "Implement",
+          "Review",
+          "Verify",
+          "Git Inspect"
+        ],
+        "optionalStages": ["PRD"],
+        "transitions": {
+          "Source Capture": ["Intake"],
+          "Intake": ["PRD", "Spec"],
+          "PRD": ["Spec"],
+          "Spec": ["Plan"],
+          "Plan": ["Implement"],
+          "Implement": ["Review"],
+          "Review": ["Verify"],
+          "Verify": ["Git Inspect"],
+          "Git Inspect": ["complete"]
+        }
+      },
+      "taskRequiredStages": [
+        "implement",
+        "review",
+        "verify",
+        "git-inspect"
+      ],
+      "references": [
+        "workflow:docs/source-capture.md#entry-gate",
+        "workflow:docs/source-capture.md#pool-entry",
+        "workflow:docs/source-capture.md#direct-entry",
+        "workflow:docs/source-capture.md#source-snapshot",
+        "workflow:docs/01-intake.md",
+        "workflow:docs/02-prd.md",
+        "workflow:docs/03-spec.md",
+        "workflow:docs/04-plan.md",
+        "workflow:docs/verification-contract.md#标准流程",
+        "workflow:docs/05-execution.md",
+        "workflow:docs/06-review.md",
+        "workflow:docs/07-verify.md",
+        "workflow:docs/08-git.md",
+        "workflow:docs/12-artifacts.md#默认保存策略",
+        "workflow:docs/12-artifacts.md#任务目录",
+        "workflow:docs/12-artifacts.md#状态与生命周期"
+      ],
+      "stages": {
+        "capture": {
+          "docs": ["workflow:resources/cards/source-lite.md"],
+          "taskStages": ["Source Capture"],
+          "references": [
+            "workflow:docs/source-capture.md#entry-gate",
+            "workflow:docs/source-capture.md#pool-entry",
+            "workflow:docs/source-capture.md#direct-entry",
+            "workflow:docs/source-capture.md#source-snapshot"
+          ],
+          "next": "确认业务事实和入口"
+        },
+        "intake": {
+          "docs": ["workflow:resources/cards/intake.md"],
+          "taskStages": ["Intake"],
+          "references": ["workflow:docs/01-intake.md"],
+          "next": "明确范围、风险和验收"
+        },
+        "prd": {
+          "docs": ["workflow:resources/cards/prd.md"],
+          "taskStages": ["PRD"],
+          "references": ["workflow:docs/02-prd.md"],
+          "next": "明确产品范围、异常规则和可测试验收标准"
+        },
+        "spec-plan": {
+          "docs": [
+            "workflow:resources/cards/spec-plan.md",
+            "workflow:resources/cards/implementation-approval.md"
+          ],
+          "taskStages": ["Spec", "Plan"],
+          "references": [
+            "workflow:docs/03-spec.md",
+            "workflow:docs/04-plan.md",
+            "workflow:docs/verification-contract.md#标准流程",
+            "workflow:docs/12-artifacts.md#默认保存策略",
+            "workflow:docs/12-artifacts.md#任务目录",
+            "workflow:docs/12-artifacts.md#状态与生命周期"
+          ],
+          "next": "提交根因/不变量、责任层、最小完整修改和验证项，等待用户批准"
+        },
+        "implement": {
+          "docs": ["workflow:resources/cards/implement.md"],
+          "taskStages": ["Implement"],
+          "references": [
+            "workflow:docs/05-execution.md"
+          ],
+          "next": "按计划实施消除根因的最小完整修改"
+        },
+        "review": {
+          "docs": ["workflow:resources/cards/review.md"],
+          "taskStages": ["Review"],
+          "references": [
+            "workflow:docs/06-review.md"
+          ],
+          "next": "按 patch 主题选择审查 Reference"
+        },
+        "verify": {
+          "docs": ["workflow:resources/cards/verify.md"],
+          "taskStages": ["Verify"],
+          "references": [
+            "workflow:docs/07-verify.md"
+          ],
+          "next": "执行允许的静态验证并记录缺口"
+        },
+        "git-inspect": {
+          "docs": ["workflow:resources/cards/git-inspect.md"],
+          "taskStages": ["Git Inspect"],
+          "references": ["workflow:docs/08-git.md"],
+          "next": "按仓库生成 Git Report"
+        }
+      }
+    },
+    "analysis": {
+      "entryModes": ["direct", "pool"],
+      "budgetChars": 13000,
+      "skillReserveChars": 2000,
+      "reasonCodes": ["read-only-analysis"],
+      "disallowedRiskFlags": [],
+      "onFailure": "保持只读，报告证据缺口和无法确认的推断",
+      "taskFlow": {
+        "stages": ["Source Capture", "Intake", "Analyze"],
+        "optionalStages": [],
+        "transitions": {
+          "Source Capture": ["Intake"],
+          "Intake": ["Analyze"],
+          "Analyze": ["complete"]
+        }
+      },
+      "references": [
+        "workflow:docs/analyze.md",
+        "workflow:docs/source-capture.md#entry-gate",
+        "workflow:docs/source-capture.md#pool-entry",
+        "workflow:docs/source-capture.md#direct-entry"
+      ],
+      "stages": {
+        "capture": {
+          "docs": ["workflow:resources/cards/source-lite.md"],
+          "taskStages": ["Source Capture", "Intake"],
+          "references": [
+            "workflow:docs/source-capture.md#entry-gate",
+            "workflow:docs/source-capture.md#pool-entry",
+            "workflow:docs/source-capture.md#direct-entry"
+          ],
+          "next": "确认分析问题和证据边界"
+        },
+        "analyze": {
+          "docs": ["workflow:resources/cards/analyze.md"],
+          "taskStages": ["Analyze"],
+          "references": ["workflow:docs/analyze.md"],
+          "next": "只读分析并形成证据链"
+        },
+        "report": {
+          "docs": ["workflow:resources/cards/report.md"],
+          "taskStages": ["Analyze"],
+          "next": "报告结论、未知项和建议"
+        }
+      }
+    },
+    "review-only": {
+      "entryModes": ["direct", "pool"],
+      "budgetChars": 14000,
+      "skillReserveChars": 3000,
+      "reasonCodes": ["read-only-review"],
+      "disallowedRiskFlags": [],
+      "onFailure": "报告未验证项，不把不确定结论写成 Finding",
+      "taskFlow": {
+        "stages": ["Source Capture", "Intake", "Review", "Verify"],
+        "optionalStages": [],
+        "transitions": {
+          "Source Capture": ["Intake"],
+          "Intake": ["Review"],
+          "Review": ["Verify"],
+          "Verify": ["complete"]
+        }
+      },
+      "references": ["workflow:docs/06-review.md", "workflow:docs/07-verify.md"],
+      "stages": {
+        "capture": {
+          "docs": ["workflow:resources/cards/source-lite.md"],
+          "taskStages": ["Source Capture", "Intake"],
+          "next": "确认评审范围和基线"
+        },
+        "review": {
+          "docs": ["workflow:resources/cards/review.md"],
+          "taskStages": ["Review"],
+          "references": ["workflow:docs/06-review.md"],
+          "next": "只读审查并输出 Findings"
+        },
+        "verify": {
+          "docs": ["workflow:resources/cards/verify.md"],
+          "taskStages": ["Verify"],
+          "references": ["workflow:docs/07-verify.md"],
+          "next": "核对证据和未验证项"
+        }
+      }
+    },
+    "workflow-maintenance": {
+      "entryModes": ["not-applicable"],
+      "budgetChars": 15000,
+      "skillReserveChars": 2500,
+      "reasonCodes": ["workflow-maintenance"],
+      "disallowedRiskFlags": [],
+      "onFailure": "停止写入，报告失败的静态门禁和最小恢复动作",
+      "references": [
+        "workflow:README.md#启动与任务分流",
+        "workflow:README.md#运行反馈与经验晋升",
+        "workflow:README.md#质量门禁",
+        "workflow:README.md#分层",
+        "workflow:docs/10-instructions-as-code.md",
+        "workflow:resources/adapters/README.md"
+      ],
+      "stages": {
+        "inspect": {
+          "docs": ["workflow:resources/cards/workflow-maintenance.md"],
+          "references": [
+            "workflow:README.md#启动与任务分流",
+            "workflow:README.md#运行反馈与经验晋升",
+            "workflow:README.md#质量门禁",
+            "workflow:README.md#分层",
+            "workflow:docs/10-instructions-as-code.md",
+            "workflow:resources/adapters/README.md"
+          ],
+          "next": "盘点加载链、事实源和确定性检查"
+        },
+        "implement": {
+          "docs": ["workflow:resources/cards/implement.md"],
+          "references": ["workflow:docs/10-instructions-as-code.md"],
+          "next": "修改工作流或检查器"
+        },
+        "review": {
+          "docs": ["workflow:resources/cards/review.md"],
+          "references": [
+            "workflow:docs/10-instructions-as-code.md",
+            "workflow:resources/adapters/README.md"
+          ],
+          "next": "审查规则冲突、脚本风险和上下文预算"
+        },
+        "verify": {
+          "docs": ["workflow:resources/cards/verify.md"],
+          "references": ["workflow:README.md#质量门禁"],
+          "next": "运行 workflow policy 和路由用例"
+        },
+        "git-inspect": {
+          "docs": ["workflow:resources/cards/git-inspect.md"],
+          "next": "报告工作流文件的仓库状态和任务专属 diff"
+        }
+      }
+    },
+    "git-only": {
+      "entryModes": ["not-applicable"],
+      "budgetChars": 11000,
+      "skillReserveChars": 1000,
+      "reasonCodes": ["explicit-git-task"],
+      "disallowedRiskFlags": [],
+      "onFailure": "停止 Git 写操作，报告确切仓库、目标和授权缺口",
+      "references": [
+        "workflow:docs/08-git.md#授权分层",
+        "workflow:docs/08-git.md#git-inspect",
+        "workflow:docs/08-git.md#commit-规则",
+        "workflow:docs/08-git.md#push-规则",
+        "workflow:docs/08-git.md#输出模板"
+      ],
+      "stages": {
+        "inspect": {
+          "docs": ["workflow:resources/cards/git-inspect.md"],
+          "references": ["workflow:docs/08-git.md#git-inspect"],
+          "next": "只读确认仓库、分支、status 和 diff"
+        },
+        "action": {
+          "docs": ["workflow:resources/cards/git-action.md"],
+          "references": [
+            "workflow:docs/08-git.md#授权分层",
+            "workflow:docs/08-git.md#commit-规则",
+            "workflow:docs/08-git.md#push-规则"
+          ],
+          "next": "仅执行用户明确授权的 Git 动作"
+        },
+        "report": {
+          "docs": ["workflow:resources/cards/report.md"],
+          "references": ["workflow:docs/08-git.md#输出模板"],
+          "next": "按仓库报告已确认状态"
+        }
+      }
+    },
+    "portable-resume": {
+      "entryModes": ["direct", "pool", "not-applicable"],
+      "budgetChars": 11500,
+      "skillReserveChars": 1500,
+      "reasonCodes": ["portable-resume"],
+      "disallowedRiskFlags": [],
+      "onFailure": "停留在 resume，报告任务状态与仓库事实的不一致",
+      "references": [
+        "workflow:docs/12-artifacts.md#portable-模式",
+        "workflow:docs/12-artifacts.md#状态与生命周期"
+      ],
+      "stages": {
+        "resume": {
+          "docs": ["workflow:resources/cards/portable-resume.md"],
+          "references": [
+            "workflow:docs/12-artifacts.md#portable-模式",
+            "workflow:docs/12-artifacts.md#状态与生命周期"
+          ],
+          "next": "读取状态摘要并切换到实际当前路由/阶段"
+        }
+      }
+    }
+  }
+}

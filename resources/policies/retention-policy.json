@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "mode": "report-only",
+  "staleOpenTaskDays": 7,
+  "runtimeLogsDays": 30,
+  "completedConversationTaskDays": 90,
+  "completedPortableTaskDays": 180,
+  "knowledgeStagingDays": 90,
+  "maxReportItems": 100
+}

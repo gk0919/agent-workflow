@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "taskId": "sample-ci-verification",
+  "repository": {
+    "name": "example-business-repository",
+    "root": "src/example",
+    "commitSha": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "environment": {
+    "provider": "gitlab-ci",
+    "runRef": "example-pipeline-1",
+    "isolated": true
+  },
+  "checks": [
+    {
+      "id": "business-build",
+      "kind": "build",
+      "status": "passed",
+      "summary": "隔离环境构建通过"
+    },
+    {
+      "id": "targeted-tests",
+      "kind": "test",
+      "status": "passed",
+      "summary": "目标测试集通过"
+    }
+  ],
+  "overallStatus": "passed",
+  "generatedAt": "2026-07-26T00:00:00.000Z"
+}

@@ -1,0 +1,50 @@
+{
+  "name": "@gk0919/agent-workflow",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Portable, profile-driven workflow engine for coding agents.",
+  "type": "module",
+  "bin": {
+    "agent-workflow": "./dist/bin/agent-workflow.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "npm run quality:policy",
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "workflow:profile": "node dist/bin/agent-workflow.js profile --check",
+    "workflow:route": "node dist/bin/agent-workflow.js route",
+    "workflow:routes:eval": "node dist/bin/agent-workflow.js routes:eval",
+    "workflow:routes:test": "node dist/bin/agent-workflow.js routes:test",
+    "quality:syntax": "node dist/bin/agent-workflow.js quality:syntax",
+    "quality:workflow": "node dist/bin/agent-workflow.js quality:workflow",
+    "quality:policy": "npm run build && node dist/bin/agent-workflow.js quality:policy",
+    "prepack": "npm run build",
+    "pack:artifact": "npm run build && node dist/scripts/pack-artifact.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gk0919/agent-workflow.git"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist/",
+    "docs/",
+    "resources/",
+    "migrations/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "rimraf": "^6.1.3",
+    "typescript": "^7.0.2"
+  }
+}

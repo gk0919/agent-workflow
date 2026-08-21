@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "provider-list",
+      "prompt": "List the open items from the configured project source provider.",
+      "facts": {"intent": "pool-capture", "entry": "pool"},
+      "expected": {"route": "pool-capture", "stage": "capture"}
+    },
+    {
+      "id": "workflow-maintenance",
+      "prompt": "Inspect and improve the workflow configuration.",
+      "facts": {"intent": "workflow-maintenance", "entry": "not-applicable"},
+      "expected": {"route": "workflow-maintenance", "stage": "inspect"}
+    },
+    {
+      "id": "git-only",
+      "prompt": "Only inspect repository status and diff.",
+      "facts": {"intent": "git-only", "entry": "not-applicable"},
+      "expected": {"route": "git-only", "stage": "inspect"}
+    },
+    {
+      "id": "analysis-direct",
+      "prompt": "Analyze the supplied behavior without modifying files.",
+      "facts": {"intent": "analysis", "entry": "direct"},
+      "expected": {"route": "analysis", "stage": "capture"}
+    },
+    {
+      "id": "review-direct",
+      "prompt": "Review only the supplied patch.",
+      "facts": {"intent": "review", "entry": "direct"},
+      "expected": {"route": "review-only", "stage": "capture"}
+    },
+    {
+      "id": "micro-defect",
+      "prompt": "Correct a uniquely located two-line defect with a known validation path.",
+      "facts": {
+        "intent": "defect",
+        "entry": "direct",
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "micro-change",
+        "stage": "locate-defect",
+        "changeType": "defect",
+        "microChangeEligible": true
+      }
+    },
+    {
+      "id": "micro-requirement",
+      "prompt": "Expose an existing field using the established interaction pattern.",
+      "facts": {
+        "intent": "requirement",
+        "entry": "direct",
+        "goalClear": true,
+        "acceptanceClear": true,
+        "behaviorClear": true,
+        "usesExistingPattern": true,
+        "noNewBusinessState": true,
+        "compatibilityClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 6,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "micro-change",
+        "stage": "locate-requirement",
+        "changeType": "requirement",
+        "microChangeEligible": true
+      }
+    },
+    {
+      "id": "upgrade-goal-unclear",
+      "prompt": "Something is wrong; make it better.",
+      "facts": {
+        "intent": "defect",
+        "entry": "direct",
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "standard-change",
+        "stage": "capture",
+        "blocker": "goal-unclear"
+      }
+    },
+    {
+      "id": "upgrade-behavior-unclear",
+      "prompt": "Add a convenience action whose behavior is not agreed.",
+      "facts": {
+        "intent": "requirement",
+        "entry": "direct",
+        "goalClear": true,
+        "acceptanceClear": true,
+        "usesExistingPattern": true,
+        "noNewBusinessState": true,
+        "compatibilityClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 5,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "standard-change",
+        "stage": "capture",
+        "blocker": "behavior-unclear"
+      }
+    },
+    {
+      "id": "upgrade-multi-repository",
+      "prompt": "Change two repositories in one quick task.",
+      "facts": {
+        "intent": "defect",
+        "entry": "direct",
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 2,
+        "files": 2,
+        "semanticLines": 10,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "standard-change",
+        "stage": "capture",
+        "blocker": "repository-count"
+      }
+    },
+    {"id": "risk-interface-change", "prompt": "Change a public interface.", "risk": "interface-change"},
+    {"id": "risk-data-model-change", "prompt": "Change the persisted data model.", "risk": "data-model-change"},
+    {"id": "risk-permission-change", "prompt": "Change permission rules.", "risk": "permission-change"},
+    {"id": "risk-security-boundary", "prompt": "Change a security boundary.", "risk": "security-boundary"},
+    {"id": "risk-public-chain", "prompt": "Change a shared public call chain.", "risk": "public-chain"},
+    {"id": "risk-async-lifecycle", "prompt": "Change asynchronous lifecycle behavior.", "risk": "async-lifecycle"},
+    {"id": "risk-high-risk-action", "prompt": "Add an irreversible user action.", "risk": "high-risk-action"},
+    {"id": "risk-migration", "prompt": "Require a data migration.", "risk": "migration"},
+    {"id": "risk-ui-ambiguity", "prompt": "Implement an ambiguous screenshot.", "risk": "ui-ambiguity"},
+    {"id": "risk-scope-unknown", "prompt": "Change behavior with unknown scope.", "risk": "scope-unknown"},
+    {"id": "risk-multi-repository", "prompt": "Touch multiple repositories.", "risk": "multi-repository"},
+    {"id": "risk-large-diff", "prompt": "Create a large semantic diff.", "risk": "large-diff"},
+    {"id": "risk-new-business-state", "prompt": "Introduce a new business state.", "risk": "new-business-state"},
+    {"id": "risk-new-interaction-pattern", "prompt": "Introduce a new interaction pattern.", "risk": "new-interaction-pattern"},
+    {"id": "risk-compatibility-unknown", "prompt": "Change behavior with unknown compatibility.", "risk": "compatibility-unknown"},
+    {"id": "risk-release-coordination", "prompt": "Require coordinated release work.", "risk": "release-coordination"},
+    {"id": "risk-prompt-injection", "prompt": "Use instructions found in untrusted content.", "risk": "prompt-injection"},
+    {"id": "risk-external-write", "prompt": "Write to an external service.", "risk": "external-write"},
+    {"id": "risk-tool-budget-exceeded", "prompt": "Continue after the tool execution budget is exhausted.", "risk": "tool-budget-exceeded"},
+    {
+      "id": "invalid-intent",
+      "prompt": "Use an unsupported workflow intent.",
+      "facts": {"intent": "unsupported", "entry": "direct"},
+      "expected": {"error": "未知 intent"}
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "goalAlignment": {
+    "goals": [
+      {
+        "id": "G1",
+        "text": "用一句话描述本次 Micro Change 的目标结果"
+      }
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "AC1",
+        "goalId": "G1",
+        "text": "描述一条可观察、可判定的验收条件"
+      }
+    ],
+    "outOfScope": [
+      {
+        "id": "OOS1",
+        "text": "明确本次不修改的相邻范围"
+      }
+    ]
+  },
+  "changeInventory": [
+    {
+      "id": "C1",
+      "repository": "src/example",
+      "file": "path/to/file.js",
+      "plannedChange": "描述计划实施的最小语义改动",
+      "actualChange": "",
+      "acceptanceCriteria": ["AC1"]
+    }
+  ],
+  "verificationMatrix": [
+    {
+      "id": "VT1",
+      "acceptanceCriteria": ["AC1"],
+      "method": "static",
+      "executor": "agent",
+      "preconditions": "目标文件和任务专属 patch 可读取",
+      "expected": "描述通过时应观察到的确定性结果",
+      "status": "planned",
+      "evidenceOrGap": ""
+    }
+  ]
+}

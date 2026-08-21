@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "taskId": "sample-verification-contract",
+  "contractStatus": "conditional",
+  "goals": [
+    {
+      "id": "G1",
+      "statement": "目标页面在合法输入下能够完成保存"
+    }
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "AC1",
+      "goalIds": ["G1"],
+      "statement": "合法输入保存成功并显示成功反馈"
+    }
+  ],
+  "outOfScope": [
+    {
+      "id": "OOS1",
+      "statement": "不修改接口契约和权限模型"
+    }
+  ],
+  "plannedChanges": [
+    {
+      "id": "C1",
+      "repository": "src/example",
+      "path": "pages/example.js",
+      "summary": "修正保存前的输入处理",
+      "acceptanceIds": ["AC1"]
+    }
+  ],
+  "actualChanges": [
+    {
+      "id": "A1",
+      "repository": "src/example",
+      "path": "pages/example.js",
+      "summary": "按计划修正保存前的输入处理",
+      "plannedChangeIds": ["C1"],
+      "acceptanceIds": ["AC1"]
+    }
+  ],
+  "testPoints": [
+    {
+      "id": "VT1",
+      "acceptanceIds": ["AC1"],
+      "method": "static",
+      "executor": "agent",
+      "instructions": "检查任务专属 JavaScript patch",
+      "expected": "没有新增 var、宽松相等或无关格式化",
+      "status": "passed",
+      "evidence": ["check-js-diff 通过"],
+      "blocker": ""
+    },
+    {
+      "id": "VT2",
+      "acceptanceIds": ["AC1"],
+      "method": "mcp-playwright",
+      "executor": "agent",
+      "instructions": "打开目标页面，填写合法数据并保存",
+      "expected": "保存成功且页面显示成功反馈",
+      "status": "blocked",
+      "capability": {
+        "available": "yes",
+        "authorized": "yes",
+        "environmentReady": "no"
+      },
+      "evidence": [],
+      "blocker": "当前没有可访问的测试页面"
+    },
+    {
+      "id": "VT3",
+      "acceptanceIds": ["AC1"],
+      "method": "manual",
+      "executor": "human",
+      "instructions": "在真实权限账号下执行一次保存",
+      "expected": "保存成功且数据范围符合账号权限",
+      "status": "planned",
+      "evidence": [],
+      "blocker": ""
+    }
+  ]
+}

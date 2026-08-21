@@ -1,0 +1,9 @@
+dist/
+artifacts/
+node_modules/
+.agent-workflow/runtime/*
+!.agent-workflow/runtime/README.md
+.agent-workflow/tasks/local/
+.worktrees/
+tests/fixtures/knowledge/_staging/*
+!tests/fixtures/knowledge/_staging/.gitkeep

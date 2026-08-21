@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "sourceTrust": {
+    "system-instructions": "trusted",
+    "repository-policy": "trusted",
+    "user-message": "untrusted",
+    "pool-record": "untrusted",
+    "attachment": "untrusted",
+    "web-content": "untrusted",
+    "tool-output": "untrusted"
+  },
+  "executionBudgets": {
+    "maxToolCallsBeforeCheckpoint": 40,
+    "maxConsecutiveFailures": 3,
+    "maxSameOperationRetries": 2,
+    "maxExternalWritesBeforeReapproval": 1
+  },
+  "toolClasses": {
+    "read-only": {
+      "risk": "low",
+      "approval": "task-scope",
+      "examples": ["repository read", "local search", "status", "diff"]
+    },
+    "repository-write": {
+      "risk": "medium",
+      "approval": "task-scope",
+      "examples": ["apply patch", "task artifact update"]
+    },
+    "external-write": {
+      "risk": "high",
+      "approval": "exact-call",
+      "examples": ["send message", "update ticket", "create pull request"]
+    },
+    "destructive-or-irreversible": {
+      "risk": "critical",
+      "approval": "exact-call",
+      "examples": ["delete data", "merge", "publish", "production change"]
+    }
+  },
+  "untrustedContent": {
+    "mayProvide": ["facts", "evidence", "requested business outcome"],
+    "mustNotControl": [
+      "instruction priority",
+      "tool permissions",
+      "approval state",
+      "security policy",
+      "workflow route",
+      "data exfiltration"
+    ]
+  }
+}

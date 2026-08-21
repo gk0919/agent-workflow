@@ -1,0 +1,87 @@
+{
+  "$schema": "../../schemas/workflow-profile.schema.json",
+  "schemaVersion": 1,
+  "id": "default",
+  "description": "Portable defaults for repositories without a project-specific workflow profile.",
+  "taskModel": {
+    "intentRoutes": {
+      "analysis": ["analysis", "capture"],
+      "change": null,
+      "defect": null,
+      "git-only": ["git-only", "inspect"],
+      "pool-capture": ["pool-capture", "capture"],
+      "portable-resume": ["portable-resume", "resume"],
+      "requirement": null,
+      "review": ["review-only", "capture"],
+      "workflow-maintenance": ["workflow-maintenance", "inspect"]
+    },
+    "changeIntents": ["change", "defect", "requirement"],
+    "changeTypes": ["defect", "requirement"],
+    "changeTypeByIntent": {
+      "defect": "defect",
+      "requirement": "requirement"
+    },
+    "evolutionaryChangeTypes": ["requirement"],
+    "microStages": {
+      "defect": "locate-defect",
+      "requirement": "locate-requirement"
+    },
+    "changeEntryModes": ["direct", "pool"],
+    "expectedIntentEntries": {
+      "git-only": ["not-applicable"],
+      "pool-capture": ["pool"],
+      "workflow-maintenance": ["not-applicable"]
+    },
+    "artifactEntryModes": ["direct", "pool"],
+    "sourceTypes": ["defect", "requirement"],
+    "providerEntryMode": "pool",
+    "sourceCaptureStage": "Source Capture",
+    "intakeStage": "Intake",
+    "knownStages": [
+      "Source Capture",
+      "Intake",
+      "Analyze",
+      "PRD",
+      "Spec",
+      "Plan",
+      "Implement",
+      "Review",
+      "Verify",
+      "Git Inspect"
+    ]
+  },
+  "sourceProviders": {
+    "direct": {
+      "kind": "conversation"
+    },
+    "pool": {
+      "kind": "connector",
+      "name": "project-source-provider"
+    }
+  },
+  "review": {
+    "defaultSkill": ""
+  },
+  "issueTracking": {
+    "enabled": false,
+    "pattern": "",
+    "flags": "i",
+    "requiredForTypes": ["feat", "fix"],
+    "enforceEnvironment": "",
+    "label": "issue"
+  },
+  "evals": {
+    "routeCases": "workflow:resources/profiles/default/evals/route-cases.json"
+  },
+  "governance": {
+    "requiredPaths": [],
+    "markdownFiles": ["AGENTS.md"],
+    "markdownRoots": [],
+    "denyEagerDocs": [],
+    "forbiddenStagedPatterns": [],
+    "deprecatedReferences": []
+  },
+  "setup": {
+    "requiredPaths": []
+  }
+}

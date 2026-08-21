@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/worktree-binding.schema.json",
+  "title": "Local AI Workflow Worktree Bindings",
+  "description": "Machine-local runtime state. Portable task artifacts must not depend on worktreePath.",
+  "type": "object",
+  "required": ["schemaVersion", "taskId", "updatedAt", "bindings"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "taskId": {
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "updatedAt": {"type": "string", "format": "date-time"},
+    "bindings": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "required": [
+          "bindingId",
+          "repository",
+          "repositoryKey",
+          "worktreePath",
+          "baseRef",
+          "baseCommit",
+          "checkoutMode",
+          "branch",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "bindingId": {"type": "string", "minLength": 3},
+          "repository": {"type": "string", "minLength": 1},
+          "repositoryKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+(?:--[A-Za-z0-9._-]+)*$"
+          },
+          "worktreePath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute path valid only on the machine that created the binding."
+          },
+          "baseRef": {"type": "string", "minLength": 1, "maxLength": 200},
+          "baseCommit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+          "checkoutMode": {"enum": ["detached", "branch"]},
+          "branch": {"type": ["string", "null"]},
+          "createdAt": {"type": "string", "format": "date-time"},
+          "updatedAt": {"type": "string", "format": "date-time"}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"checkoutMode": {"const": "detached"}},
+              "required": ["checkoutMode"]
+            },
+            "then": {"properties": {"branch": {"type": "null"}}}
+          },
+          {
+            "if": {
+              "properties": {"checkoutMode": {"const": "branch"}},
+              "required": ["checkoutMode"]
+            },
+            "then": {"properties": {"branch": {"type": "string", "minLength": 1}}}
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

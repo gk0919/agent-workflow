@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# agent-workflow:managed-hook
+hook_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+workspace_root=$(CDPATH= cd -- "$hook_directory/.." && pwd)
+
+cd "$workspace_root"
+npm exec --no -- agent-workflow quality:staged
+npm exec --no -- agent-workflow quality:skills
+npm exec --no -- agent-workflow quality:workflow
+npm exec --no -- agent-workflow quality:tasks
+

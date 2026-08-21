@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/ci-verification.schema.json",
+  "title": "AI Workflow CI Verification Result",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "taskId",
+    "repository",
+    "environment",
+    "checks",
+    "overallStatus",
+    "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "taskId": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "repository": {
+      "type": "object",
+      "required": ["name", "root", "commitSha"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 80},
+        "root": {"type": "string", "minLength": 1, "maxLength": 200},
+        "commitSha": {"type": "string", "pattern": "^[a-f0-9]{7,64}$"}
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": ["provider", "runRef", "isolated"],
+      "properties": {
+        "provider": {
+          "enum": ["github-actions", "gitlab-ci", "jenkins", "other"]
+        },
+        "runRef": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,120}$"},
+        "isolated": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "status", "summary"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "kind": {
+            "enum": ["build", "test", "smoke", "lint", "security", "other"]
+          },
+          "status": {"enum": ["passed", "failed", "skipped"]},
+          "summary": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "additionalProperties": false
+      }
+    },
+    "overallStatus": {"enum": ["passed", "failed", "partial"]},
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  },
+  "additionalProperties": false
+}
