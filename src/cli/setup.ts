@@ -63,10 +63,10 @@ const printUsage = (): void => {
     '',
     'Options:',
     `  --agent <name>   auto, all, ${TOOL_TARGET_NAMES.join(', ')}.`,
-    '                   May be repeated.',
-    '  --check          Check existing bootstrap files without writing.',
-    '  --dry-run        Show planned changes without writing.',
-    '  --help           Show this help.',
+    '                   可重复指定。',
+    '  --check          检查现有启动文件，不执行写入。',
+    '  --dry-run        显示计划修改，不执行写入。',
+    '  --help           显示帮助。',
     '',
     'Examples:',
     '  agent-workflow setup --agent auto',
@@ -97,7 +97,7 @@ const parseArguments = (args: string[]): void => {
     if (argument === '--agent') {
       const agent = args[index + 1];
       if (!agent) {
-        throw new Error('--agent requires a value.');
+        throw new Error('--agent 需要提供值。');
       }
       options.agents.push(agent);
       index += 1;
@@ -109,11 +109,11 @@ const parseArguments = (args: string[]): void => {
       continue;
     }
 
-    throw new Error(`Unknown option: ${argument}`);
+    throw new Error(`未知选项：${argument}`);
   }
 
   if (options.check && options.dryRun) {
-    throw new Error('--check and --dry-run cannot be used together.');
+    throw new Error('--check 与 --dry-run 不能同时使用。');
   }
 
   if (options.agents.length === 0) {
@@ -122,11 +122,11 @@ const parseArguments = (args: string[]): void => {
 
   const invalidAgent = options.agents.find((agent) => !supportedAgents.has(agent));
   if (invalidAgent) {
-    throw new Error(`Unsupported agent: ${invalidAgent}`);
+    throw new Error(`不支持的 Agent：${invalidAgent}`);
   }
 
   if (options.agents.length > 1 && (options.agents.includes('auto') || options.agents.includes('all'))) {
-    throw new Error('Use auto or all by itself.');
+    throw new Error('auto 或 all 必须单独使用。');
   }
 };
 
@@ -150,18 +150,18 @@ let missingCount = 0;
 const setManagedBridge = (targetPath: string, header = ''): void => {
   const relativePath = displayPath(targetPath);
   if (hasWorkflowReference(targetPath)) {
-    console.log(`[ok] ${relativePath} is connected`);
+    console.log(`[ok] ${relativePath} 已接入`);
     return;
   }
 
   if (options.check) {
-    console.log(`[missing] ${relativePath} is not connected`);
+    console.log(`[missing] ${relativePath} 尚未接入`);
     missingCount += 1;
     return;
   }
 
   if (options.dryRun) {
-    console.log(`[plan] connect ${relativePath}`);
+    console.log(`[plan] 接入 ${relativePath}`);
     return;
   }
 
@@ -173,10 +173,10 @@ const setManagedBridge = (targetPath: string, header = ''): void => {
   try {
     update = updateManagedBlock(existingContent, managedBlock, BOOTSTRAP_BLOCK, header);
   } catch (error: unknown) {
-    throw new Error(`Refusing to update malformed managed block in ${relativePath}: ${errorMessage(error)}`);
+    throw new Error(`拒绝更新 ${relativePath} 中格式异常的 managed block：${errorMessage(error)}`);
   }
   fs.writeFileSync(targetPath, update.content, 'utf8');
-  console.log(`[updated] ${relativePath} is connected`);
+  console.log(`[updated] ${relativePath} 已接入`);
 };
 
 const addDetectedTargets = (targets: Set<string>): void => {
@@ -209,44 +209,44 @@ const resolveTargets = (): Set<string> => {
 
 const checkRequiredFiles = (): void => {
   const requiredFiles: Array<[string, string]> = [
-    [workflowConfigPath, 'workflow host configuration'],
-    [startFile, 'workflow entry'],
-    [agentsFile, 'repository instructions'],
-    [skillsRoot, 'neutral skill directory'],
+    [workflowConfigPath, '工作流宿主配置'],
+    [startFile, '工作流入口'],
+    [agentsFile, '仓库指令'],
+    [skillsRoot, '中立 Skill 目录'],
     ...activeProfile.setup.requiredPaths.map((relativePath): [string, string] => [
       resolveWorkspaceRelativePath(relativePath, 'setup.requiredPaths'),
-      `${activeProfile.id} profile requirement`,
+      `${activeProfile.id} Profile 必需项`,
     ]),
     ...TOOL_TARGETS.map(({ adapter }): [string, string] => [
       path.join(workflowRoot, adapter),
-      'tool adapter',
+      '工具 Adapter',
     ]),
-    ...qualityScripts.map((filePath): [string, string] => [filePath, 'quality script']),
+    ...qualityScripts.map((filePath): [string, string] => [filePath, '质量检查脚本']),
   ];
   requiredFiles.forEach(([filePath, label]) => {
     if (!exists(filePath)) {
-      throw new Error(`Missing ${label}: ${filePath}`);
+      throw new Error(`缺少${label}：${filePath}`);
     }
   });
 
   const agentsContent = readUtf8(agentsFile);
   if (agentsContent.includes(workflowEntryReference)) {
-    console.log('[ok] AGENTS.md points to the workflow entry');
+    console.log('[ok] AGENTS.md 已指向工作流入口');
     return;
   }
 
-  console.log(`[missing] AGENTS.md does not point to ${workflowEntryReference}`);
+  console.log(`[missing] AGENTS.md 未指向 ${workflowEntryReference}`);
   missingCount += 1;
 };
 
 const connectTarget = (target: string): void => {
   const targetConfig = getToolTarget(target);
   if (!targetConfig) {
-    throw new Error(`Missing target configuration: ${target}`);
+    throw new Error(`缺少目标配置：${target}`);
   }
 
   if (targetConfig.bootstrap === 'shared') {
-    console.log(`[shared] ${target} uses the root AGENTS.md`);
+    console.log(`[shared] ${target} 使用根目录 AGENTS.md`);
     return;
   }
 
@@ -260,7 +260,7 @@ const connectTarget = (target: string): void => {
 
   if (targetConfig.bootstrap === 'prompt') {
     console.log(
-      `[fallback] Prompt: ${targetConfig.manualPrompt.replace('agent-workflow/docs/START.md', workflowEntryReference)}`,
+      `[fallback] Prompt：${targetConfig.manualPrompt.replace('agent-workflow/docs/START.md', workflowEntryReference)}`,
     );
   }
 };
@@ -278,7 +278,7 @@ const main = (): void => {
   targets.forEach(connectTarget);
 
   if (options.check) {
-    console.log('Check complete. Run agent-workflow setup when a [missing] entry is reported.');
+    console.log('检查完成；如有 [missing] 项，请运行 agent-workflow setup。');
     if (missingCount > 0) {
       process.exitCode = 1;
     }
@@ -286,11 +286,11 @@ const main = (): void => {
   }
 
   if (options.dryRun) {
-    console.log('Dry run complete. No files were changed.');
+    console.log('试运行完成，未修改任何文件。');
     return;
   }
 
-  console.log('Setup complete. Open the project and submit a request or defect directly.');
+  console.log('接入完成。打开项目后即可直接提交需求或缺陷。');
 };
 
 try {

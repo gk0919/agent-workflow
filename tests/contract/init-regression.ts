@@ -61,7 +61,7 @@ const markdownFiles = (directory: string): string[] => readdirSync(
   return entry.isFile() && entry.name.endsWith('.md') ? [targetPath] : [];
 });
 
-/** Verifies safe initialization, idempotence and the committed generic host. */
+/** 验证安全初始化、幂等性和已纳管的通用宿主示例。 */
 export const main = (): number => {
   const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'agent-workflow-init-'));
   try {
@@ -95,7 +95,7 @@ export const main = (): number => {
       assert.equal(
         readFileSync(path.join(hostRoot, relativePath), 'utf8'),
         firstPass[relativePath],
-        `${relativePath} changed during idempotent init`,
+        `${relativePath} 在幂等 init 中发生变化`,
       );
     });
 
@@ -124,11 +124,11 @@ export const main = (): number => {
 
     generatedFiles.forEach((relativePath) => {
       const examplePath = exampleFilePath(relativePath);
-      assert.ok(existsSync(examplePath), `example missing ${relativePath}`);
+      assert.ok(existsSync(examplePath), `示例缺少 ${relativePath}`);
       assert.equal(
         normalizeLineEndings(readFileSync(examplePath, 'utf8')),
         normalizeLineEndings(readFileSync(path.join(hostRoot, relativePath), 'utf8')),
-        `example drift: ${relativePath}`,
+        `示例发生漂移：${relativePath}`,
       );
     });
     assert.ok(existsSync(path.join(exampleRoot, '.github', 'workflows', 'agent-workflow.yml')));

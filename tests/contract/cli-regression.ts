@@ -16,7 +16,7 @@ const runCli = (args: string[]) => spawnSync(process.execPath, [cliPath, ...args
   windowsHide: true,
 });
 
-/** Protects the public command surface from internal path and version drift. */
+/** 防止公开命令界面因内部路径或版本变化而漂移。 */
 export const main = (): number => {
   try {
     const packageMetadata = JSON.parse(

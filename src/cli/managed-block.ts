@@ -11,7 +11,7 @@ export interface ManagedBlockUpdate {
   content: string;
 }
 
-/** Updates one generated section while preserving all user-owned content. */
+/** 更新一个生成区块，同时保留全部用户自有内容。 */
 export const updateManagedBlock = (
   existingContent: string,
   managedBlock: string,
@@ -21,7 +21,7 @@ export const updateManagedBlock = (
   const startCount = existingContent.split(definition.start).length - 1;
   const endCount = existingContent.split(definition.end).length - 1;
   if (startCount !== endCount || startCount > 1) {
-    throw new Error('Refusing to update malformed managed block');
+    throw new Error('拒绝更新格式异常的 managed block');
   }
 
   const pattern = new RegExp(

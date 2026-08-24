@@ -1,6 +1,6 @@
 const cursorHeader = [
   '---',
-  'description: Load the repository AI workflow before handling any task.',
+  'description: 处理任何任务前先加载仓库的 AI 工作流。',
   'globs:',
   'alwaysApply: true',
   '---',
@@ -71,7 +71,7 @@ export const TOOL_TARGETS: readonly ToolTarget[] = Object.freeze([
     name: 'generic',
     adapter: 'resources/adapters/generic-agent.md',
     bootstrap: 'prompt',
-    manualPrompt: 'Follow agent-workflow/docs/START.md for this task: <request or defect>',
+    manualPrompt: '本任务请遵守 agent-workflow/docs/START.md：<需求或缺陷>',
   },
 ]);
 

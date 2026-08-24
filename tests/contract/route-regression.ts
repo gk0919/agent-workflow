@@ -258,7 +258,7 @@ function withClassification(
   };
 }
 
-/** Exercises the portable route matrix and all safety/lineage contracts. */
+/** 覆盖可移植路由矩阵以及全部安全与来源链契约。 */
 export const main = () => {
   try {
     const config = loadRoutes();

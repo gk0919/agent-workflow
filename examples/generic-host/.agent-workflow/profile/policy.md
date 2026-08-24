@@ -1,3 +1,3 @@
-# Project Workflow Policy
+# 项目工作流策略
 
-Document project-specific workflow facts and reference them from AGENTS.md or a selected Skill.
+在此记录项目专属工作流事实，并从 AGENTS.md 或命中的 Skill 中引用。

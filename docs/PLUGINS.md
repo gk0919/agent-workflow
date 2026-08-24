@@ -1,24 +1,21 @@
-# Plugin System
+# 插件系统
 
-The plugin system extends executable capabilities without allowing extensions to
-replace workflow state transitions, approval enforcement, security decisions,
-contract versioning or artifact-ledger integrity.
+插件系统用于扩展可执行能力，但扩展不得替代工作流状态流转、审批门禁、安全决策、契约版本管理或产物账本完整性。
 
-## Runtime levels
+正式内置 Plugin 位于 `src/plugins/`，只通过 `package.json#exports` 声明的公共子路径供宿主使用。`examples/` 只展示宿主接入结果，不得作为模块导出或被宿主直接依赖。
 
-- Declarative extensions remain in Profiles, Routes, Cards, Schemas and Policies.
-- Trusted TypeScript/JavaScript extensions use the in-process ESM host.
-- Python, Rust, C# and untrusted Node extensions use the versioned JSON-RPC boundary.
-- External systems use MCP, HTTP or gRPC adapters. The package defines the boundary
-  without forcing one transport SDK on every consumer.
+## 运行层级
 
-In-process permissions are an auditable host-service contract, not a sandbox.
-Plugins that require isolation must not be loaded through `host-node`.
-The process boundary uses JSON-RPC 2.0 plus an independent protocol version and
-the fixed `plugin.describe`, `plugin.activate`, `plugin.deactivate` and
-`service.invoke` method set.
+- 声明式扩展仍放在 Profile、Route、阶段卡、Schema 和策略中。
+- 受信任的 TypeScript/JavaScript 扩展使用进程内 ESM 宿主。
+- Python、Rust、C# 和不受信任的 Node 扩展使用带版本的 JSON-RPC 边界。
+- 外部系统使用 MCP、HTTP 或 gRPC Adapter。通用包只定义边界，不强制所有宿主安装同一种传输 SDK。
 
-## Trusted ESM plugin
+进程内权限是可审计的宿主服务契约，不是安全沙箱。需要隔离的插件不得通过 `host-node` 加载。
+进程边界使用 JSON-RPC 2.0、独立协议版本，以及固定的 `plugin.describe`、`plugin.activate`、
+`plugin.deactivate` 和 `service.invoke` 方法集合。
+
+## 受信任的 ESM 插件
 
 ```ts
 import {
@@ -53,7 +50,7 @@ export default definePlugin({
 });
 ```
 
-Configure it in `.agent-workflow/config.json`:
+在 `.agent-workflow/config.json` 中配置：
 
 ```json
 {
@@ -68,32 +65,19 @@ Configure it in `.agent-workflow/config.json`:
 }
 ```
 
-Run `agent-workflow plugins:check` to load every enabled plugin, validate its
-manifest and permissions, activate it in dependency order, then verify reverse
-cleanup. A startup failure rolls back all effects from that activation attempt.
-Normal CLI commands activate the host around command execution and emit only
-`command:before` and `command:after` metadata; command arguments and user content
-are intentionally excluded. Programmatic consumers resolve capability services
-from `createNodePluginHost()`.
+运行 `agent-workflow plugins:check` 会加载全部启用插件，校验插件清单与权限，按依赖顺序激活，并验证逆序清理。启动失败时，本次激活产生的全部副作用都会回滚。
 
-The package also includes a runnable MCP `source-provider` example and a generic
-capture command. See
-[`examples/mcp-source-provider/README.md`](../examples/mcp-source-provider/README.md)
-for secure environment-variable authentication, route mapping and exact source
-capture with `agent-workflow source:capture`.
+普通 CLI 命令在执行前后激活和关闭宿主，只发送 `command:before` 与 `command:after` 元数据；命令参数和用户内容不会进入事件。程序调用方通过 `createNodePluginHost()` 获取能力服务。
 
-## Contract rules
+通用包还提供正式内置的 MCP `source-provider` 模块和通用捕获命令。安全的环境变量认证、Active Profile 的 Source Provider 绑定、Route 映射和 `agent-workflow source:capture` 精确来源捕获方式，见
+[`MCP-SOURCE-PROVIDER.md`](./MCP-SOURCE-PROVIDER.md)。
 
-- A configured id must match the module Manifest id.
-- `apiVersion`, capabilities, permissions, provided services and dependencies are
-  validated before `setup` executes.
-- A plugin may resolve only services declared in `requires.services` and may
-  register only services declared in `provides.services`.
-- Route extensions return candidates rather than selecting a route. Approval
-  providers collect decisions rather than changing workflow state; the protected
-  core performs both final decisions.
-- Permission-bearing host services require both a Manifest request and an explicit
-  project grant.
-- Events run serially. Service registrations, subscriptions and `context.effect`
-  cleanups are reversed in last-in-first-out order.
-- Plugin and service dependency cycles fail before any setup code runs.
+## 契约规则
+
+- 配置中的 `id` 必须与插件清单中的 `id` 一致。
+- `apiVersion`、能力、权限、提供的服务和依赖必须在执行 `setup` 前完成校验。
+- 插件只能获取 `requires.services` 声明的服务，只能注册 `provides.services` 声明的服务。
+- Route Extension 只能返回候选项，不能直接决定 Route；Approval Provider 只能收集决定，最终决策和状态变更仍由受保护的 Core 执行。
+- 带权限的宿主服务必须同时具备插件清单申请和项目显式授权。
+- 事件串行执行；服务注册、订阅和 `context.effect` 清理按后进先出顺序撤销。
+- 插件或服务依赖存在循环时，必须在执行任何 `setup` 前失败。

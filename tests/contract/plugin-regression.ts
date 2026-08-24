@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -18,7 +19,7 @@ import {
   sourceProviderService,
 } from '../../src/plugin-sdk/index.js';
 import { loadWorkflowConfig, validateWorkflowConfig } from '../../src/config/workflow-config.js';
-import { workspaceRoot } from '../../src/config/workspace-paths.js';
+import { workflowRoot } from '../../src/config/workspace-paths.js';
 import { errorMessage } from '../../src/types/guards.js';
 
 const valueService = defineService<string>('test/value');
@@ -90,7 +91,7 @@ const lifecycleContract = async (): Promise<void> => {
     },
   });
   const host = new WorkflowPluginRuntime({
-    // Reverse declaration order proves that dependencies, not config order, drive activation.
+    // 反向声明用于证明激活顺序由依赖关系决定，而不是由配置顺序决定。
     plugins: [
       { configuration: configuration('value-consumer'), plugin: consumer },
       { configuration: configuration('value-provider'), plugin: provider },
@@ -189,7 +190,7 @@ const rollbackContract = async (): Promise<void> => {
       await context.effect(() => () => {
         events.push('failure:rollback');
       });
-      throw new Error('intentional setup failure');
+      throw new Error('预期的初始化失败');
     },
   });
   const host = new WorkflowPluginRuntime({
@@ -198,7 +199,7 @@ const rollbackContract = async (): Promise<void> => {
       { configuration: configuration('rollback-provider'), plugin: provider },
     ],
   });
-  await assert.rejects(host.start(), /intentional setup failure/);
+  await assert.rejects(host.start(), /预期的初始化失败/);
   assert.equal(host.state, 'idle');
   assert.deepEqual(events, ['failure:rollback', 'provider:rollback']);
   assert.deepEqual(host.getServices(valueService), []);
@@ -213,7 +214,7 @@ const rollbackContract = async (): Promise<void> => {
     },
     setup(context) {
       context.on('plugin:activated', () => {
-        throw new Error('activation event failure');
+        throw new Error('激活事件失败');
       });
       return () => {
         activationCleanupCount += 1;
@@ -226,7 +227,7 @@ const rollbackContract = async (): Promise<void> => {
       plugin: eventFailure,
     }],
   });
-  await assert.rejects(eventFailureHost.start(), /activation event failure/);
+  await assert.rejects(eventFailureHost.start(), /激活事件失败/);
   assert.equal(activationCleanupCount, 1);
   assert.equal(eventFailureHost.state, 'idle');
 };
@@ -294,17 +295,33 @@ const nodeLoaderContract = async (): Promise<void> => {
     module: './dist/tests/fixtures/plugins/source-plugin.js',
     permissions: [],
   }];
-  const host = await createNodePluginHost(config, { workspaceRoot });
+  const host = await createNodePluginHost(config, { workspaceRoot: workflowRoot });
   await host.start();
   const [provider] = host.getServices(sourceProviderService);
   assert.ok(provider);
   assert.equal((await provider.capture({ entry: 'direct' })).sourceType, 'fixture');
   await host.stop();
 
+  const [formalMcpProvider] = await loadNodePlugins([{
+    id: 'mcp-source-provider',
+    module: '@gk0919/agent-workflow/plugins/mcp-source-provider',
+    permissions: ['network:connect', 'secrets:read'],
+  }], workflowRoot);
+  assert.equal(formalMcpProvider?.plugin.manifest.id, 'mcp-source-provider');
+
   await assert.rejects(
-    loadNodePlugins([{ id: 'outside', module: '../outside.js' }], workspaceRoot),
+    loadNodePlugins([{ id: 'outside', module: '../outside.js' }], workflowRoot),
     /不能越出工作区/,
   );
+};
+
+const packageBoundaryContract = (): void => {
+  const packageJson = JSON.parse(
+    readFileSync(path.join(workflowRoot, 'package.json'), 'utf8'),
+  ) as { exports: Record<string, unknown> };
+  const exportKeys = Object.keys(packageJson.exports);
+  assert.ok(exportKeys.includes('./plugins/mcp-source-provider'));
+  assert.ok(exportKeys.every((key) => !key.startsWith('./examples/')));
 };
 
 const configurationAndRpcContract = (): void => {
@@ -331,7 +348,7 @@ const configurationAndRpcContract = (): void => {
   }, request), /响应 id 不匹配/);
 };
 
-/** Covers plugin ordering, permissions, rollback, loading and transport contracts. */
+/** 覆盖插件顺序、权限、回滚、加载和传输契约。 */
 export const main = async (): Promise<number> => {
   try {
     await lifecycleContract();
@@ -339,6 +356,7 @@ export const main = async (): Promise<number> => {
     await rollbackContract();
     await declarationContract();
     await nodeLoaderContract();
+    packageBoundaryContract();
     configurationAndRpcContract();
     process.stdout.write(
       '插件契约回归通过：依赖、权限、生命周期、回滚、ESM 加载与 RPC 边界正常。\n',

@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "extends": "workflow:resources/profiles/default/profile.json",
   "id": "generic-host",
-  "description": "Project-specific workflow bindings for generic-host.",
+  "description": "generic-host 的项目专属工作流绑定。",
   "governance": {
     "markdownFiles": [
       "AGENTS.md",

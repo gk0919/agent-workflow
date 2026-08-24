@@ -72,7 +72,7 @@
             "workflow:docs/source-capture.md#entry-gate",
             "workflow:docs/source-capture.md#pool-entry"
           ],
-          "next": "使用缺陷池 Skill 读取本地事实并形成 Source Lite"
+          "next": "调用 Active Profile 声明的 Source Provider 读取事实并形成 Source Lite"
         },
         "report": {
           "docs": ["workflow:resources/cards/report.md"],

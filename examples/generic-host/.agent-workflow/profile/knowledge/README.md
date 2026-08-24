@@ -1,3 +1,3 @@
-# Project Knowledge
+# 项目知识
 
-Reusable project knowledge is staged and approved here; runtime logs and credentials are never stored here.
+可复用的项目知识在此暂存并经过批准；运行日志和凭据绝不存放在此处。

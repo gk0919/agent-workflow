@@ -17,7 +17,7 @@ import { loadRoutes } from './context-budget.js';
 const displayPath = (filePath: string): string =>
   path.relative(workspaceRoot, filePath).split(path.sep).join('/');
 
-/** Ensures every persisted task stage used by Routes is accepted by the Active Profile. */
+/** 确保 Route 使用的每个持久化任务阶段都已被 Active Profile 接受。 */
 export const validateProfileTaskStages = (
   profile: WorkflowProfile,
   routes: RoutesConfig,
@@ -30,7 +30,7 @@ export const validateProfileTaskStages = (
         `${routeName}.taskFlow 使用 Profile 未登记阶段：${stageName}`));
 };
 
-/** Builds a compact report without exposing Profile contents or repository data. */
+/** 生成精简报告，不暴露 Profile 内容或仓库数据。 */
 export const buildProfileReport = () => {
   const config = loadWorkflowConfig();
   const profile = loadActiveProfile(config);
@@ -55,7 +55,7 @@ export const buildProfileReport = () => {
   };
 };
 
-/** Validates and reports the Active Profile for CLI and quality-gate use. */
+/** 校验并报告 Active Profile，供 CLI 和质量门禁使用。 */
 export const main = (args: string[] = process.argv.slice(2)): number => {
   const unknownArgs = args.filter((argument) => !['--check', '--json'].includes(argument));
   if (unknownArgs.length > 0) {

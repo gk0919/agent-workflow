@@ -8,12 +8,12 @@ import type {
   SourceCaptureRequest,
   SourceCaptureResult,
   SourceProviderService,
-} from '../../src/contracts/capabilities.js';
-import type { PluginJsonObject, PluginJsonValue } from '../../src/contracts/json.js';
+} from '../../contracts/capabilities.js';
+import type { PluginJsonObject, PluginJsonValue } from '../../contracts/json.js';
 import {
   definePlugin,
   sourceProviderService,
-} from '../../src/plugin-sdk/index.js';
+} from '../../plugin-sdk/index.js';
 import {
   parseMcpSourceProviderOptions,
   type McpSourceProviderOptions,
@@ -84,7 +84,7 @@ const closeClient = async (
   }
 };
 
-/** Uses the official MCP TypeScript client and Streamable HTTP transport. */
+/** 使用官方 MCP TypeScript 客户端和 Streamable HTTP 传输。 */
 export const connectMcpSource: McpSourceConnector = async (options) => {
   const authProvider: AuthProvider = {
     token: async () => options.readToken(),
@@ -209,6 +209,40 @@ const selectReferenceArgument = (tool: McpSourceTool, route: McpSourceRoute): st
   );
 };
 
+const selectRoute = (
+  routes: Readonly<Record<string, McpSourceRoute>>,
+  requestedEntry: string,
+  reference: string,
+): { entry: string; route: McpSourceRoute } => {
+  const exactRoute = routes[requestedEntry];
+  if (exactRoute) {
+    if (exactRoute.referencePattern &&
+        !new RegExp(exactRoute.referencePattern).test(reference)) {
+      throw new Error(
+        `reference 不符合 Entry ${requestedEntry} 的 referencePattern`,
+      );
+    }
+    return { entry: requestedEntry, route: exactRoute };
+  }
+
+  // Profile 可以声明逻辑 Entry；编号匹配规则归 Adapter 所有，且必须唯一解析到一个 Route。
+  const matches = Object.entries(routes).filter(([, route]) =>
+    route.referencePattern && new RegExp(route.referencePattern).test(reference));
+  if (matches.length === 0) {
+    throw new Error(
+      `未配置 Entry：${requestedEntry}，且没有 referencePattern 匹配该 reference`,
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      'reference 同时匹配多个 Route：' +
+      matches.map(([entry]) => entry).join(', '),
+    );
+  }
+  const [entry, route] = matches[0] as [string, McpSourceRoute];
+  return { entry, route };
+};
+
 class McpSourceProvider implements SourceProviderService {
   readonly id = 'mcp-source-provider';
   readonly #activeCaptures = new Set<Promise<SourceCaptureResult>>();
@@ -250,21 +284,16 @@ class McpSourceProvider implements SourceProviderService {
     const entry = request.entry.trim();
     const reference = request.reference?.trim();
     if (!entry) {
-      throw new Error('source entry 不能为空');
+      throw new Error('Entry 不能为空');
     }
     if (!reference) {
-      throw new Error(`source entry ${entry} 必须提供 reference`);
+      throw new Error(`Entry ${entry} 必须提供 reference`);
     }
     if (reference.length > 512) {
-      throw new Error('source reference 不能超过 512 个字符');
+      throw new Error('reference 不能超过 512 个字符');
     }
-    const route = this.#options.routes[entry];
-    if (!route) {
-      throw new Error(`未配置 source entry：${entry}`);
-    }
-    if (route.referencePattern && !new RegExp(route.referencePattern).test(reference)) {
-      throw new Error(`source reference 不符合 ${entry} 的 referencePattern`);
-    }
+    const selected = selectRoute(this.#options.routes, entry, reference);
+    const route = selected.route;
     const connection = await this.#connection();
     this.#toolsPromise ??= connection.listTools(this.#options.timeoutMs).catch(
       (error: unknown) => {
@@ -286,7 +315,7 @@ class McpSourceProvider implements SourceProviderService {
       name: route.tool,
     }, this.#options.timeoutMs);
     return toSourceCaptureResult(result, {
-      entry,
+      entry: selected.entry,
       maxTextChars: this.#options.maxTextChars,
       now: this.#now,
       reference,
@@ -316,7 +345,7 @@ class McpSourceProvider implements SourceProviderService {
   }
 }
 
-/** Creates an independently testable provider without activating a plugin host. */
+/** 创建无需激活插件宿主即可独立测试的 Provider。 */
 export const createMcpSourceProvider = (
   options: Readonly<PluginJsonObject>,
   dependencies: McpSourceProviderDependencies = {},
@@ -327,7 +356,7 @@ const plugin = definePlugin({
   manifest: {
     apiVersion: 1,
     capabilities: ['source-provider'],
-    description: 'Captures exact requirement or defect references through an MCP server.',
+    description: '通过 MCP 服务捕获精确的需求或缺陷编号。',
     id: 'mcp-source-provider',
     permissions: ['network:connect', 'secrets:read'],
     provides: { services: [sourceProviderService.id] },

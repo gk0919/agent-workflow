@@ -1,4 +1,4 @@
-import type { PluginJsonObject, PluginJsonValue } from '../../src/contracts/json.js';
+import type { PluginJsonObject, PluginJsonValue } from '../../contracts/json.js';
 
 const ENTRY_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 const ENVIRONMENT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -101,7 +101,7 @@ const readStaticArguments = (
 const readRoute = (entry: string, value: PluginJsonValue | undefined): McpSourceRoute => {
   const path = `routes.${entry}`;
   if (!ENTRY_PATTERN.test(entry)) {
-    throw new Error(`非法 source entry：${entry}`);
+    throw new Error(`非法 Entry：${entry}`);
   }
   if (!isObject(value)) {
     throw new Error(`${path} 必须是对象`);
@@ -131,7 +131,7 @@ const readRoute = (entry: string, value: PluginJsonValue | undefined): McpSource
   });
 };
 
-/** Validates the JSON trust boundary before any network or secret access occurs. */
+/** 在访问网络或凭据前校验 JSON 信任边界。 */
 export const parseMcpSourceProviderOptions = (
   value: Readonly<PluginJsonObject>,
 ): McpSourceProviderOptions => {
@@ -159,7 +159,7 @@ export const parseMcpSourceProviderOptions = (
 
   const routesValue = value.routes;
   if (!isObject(routesValue) || Object.keys(routesValue).length === 0) {
-    throw new Error('routes 必须是至少包含一个 entry 的对象');
+    throw new Error('routes 必须是至少包含一个 Entry 的对象');
   }
   const routes = Object.freeze(Object.fromEntries(
     Object.entries(routesValue).map(([entry, route]) => [entry, readRoute(entry, route)]),

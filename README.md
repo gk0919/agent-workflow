@@ -278,9 +278,10 @@ agent-workflow quality:policy
 
 MCP、subagent、hooks、自动同步和自动提交都属于可选增强能力；缺少这些能力时，核心流程仍然必须可执行。
 
-需要把外部 MCP 的需求或缺陷查询接入 `source-provider` 时，可直接参考
-[`examples/mcp-source-provider/README.md`](./examples/mcp-source-provider/README.md)。示例通过公开插件契约和
-`source:capture` 命令工作，不把业务接口或凭据写入 Core。
+需要把外部 MCP 的需求或缺陷查询接入 `source-provider` 时，使用正式内置模块
+[`@gk0919/agent-workflow/plugins/mcp-source-provider`](./docs/MCP-SOURCE-PROVIDER.md)。该模块通过公开 Plugin 契约和
+`source:capture` 命令工作；命令默认按 Active Profile 的 Source Provider 绑定选择 Plugin，
+具体编号和工具映射仍留在宿主插件配置中，不把业务接口或凭据写入 Core。
 
 依赖方向、公开 API 和状态边界见 [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md)；通用内核、Active Profile 和新项目接入方式见 [`PORTABILITY.md`](./docs/PORTABILITY.md)。项目词汇、Source Provider、Review Skill、Issue 规则和治理路径不得写回 Core。
 

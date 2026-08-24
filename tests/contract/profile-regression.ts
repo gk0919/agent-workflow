@@ -16,7 +16,7 @@ import { buildRoutePacket, loadRoutes } from '../../src/core/context-budget.js';
 import { validateProfileTaskStages } from '../../src/core/profile.js';
 import { errorMessage } from '../../src/types/guards.js';
 
-/** Covers Profile replacement, path containment and legacy route compatibility. */
+/** 覆盖 Profile 替换、路径边界和旧路由兼容性。 */
 export const main = (): number => {
   try {
     const config = loadWorkflowConfig();
@@ -24,7 +24,9 @@ export const main = (): number => {
     const defaultProfile = loadWorkflowProfile(
       'workflow:resources/profiles/default/profile.json',
     );
-    const overlayProfile = loadWorkflowProfile('tests/fixtures/profiles/overlay.json');
+    const overlayProfile = loadWorkflowProfile(
+      'workflow:tests/fixtures/profiles/overlay.json',
+    );
     assert.ok(profile.id);
     assert.equal(defaultProfile.id, 'default');
     assert.equal(overlayProfile.id, 'overlay-test');
@@ -45,7 +47,7 @@ export const main = (): number => {
       ['workflow-maintenance.taskFlow 使用 Profile 未登记阶段：Inspect'],
     );
     assert.throws(
-      () => loadWorkflowProfile('tests/fixtures/profiles/cycle-a.json'),
+      () => loadWorkflowProfile('workflow:tests/fixtures/profiles/cycle-a.json'),
       /extends 存在循环/,
     );
     const activeIssueRule = buildIssueTrackingRule(profile);

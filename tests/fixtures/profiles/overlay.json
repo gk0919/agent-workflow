@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "extends": "workflow:resources/profiles/default/profile.json",
   "id": "overlay-test",
-  "description": "Project overlay used by the Profile contract regression.",
+  "description": "Profile 契约回归使用的项目覆盖层。",
   "issueTracking": {
     "label": "work-item"
   },

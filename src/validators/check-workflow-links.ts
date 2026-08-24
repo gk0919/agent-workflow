@@ -195,7 +195,7 @@ const validateManagedBridge = (relativePath: string, errors: string[]): void => 
   }
 };
 
-/** Validates package resources and the Active Profile's project references. */
+/** 校验包内资源和 Active Profile 的项目引用。 */
 export const main = (): number => {
   const errors: string[] = [];
 

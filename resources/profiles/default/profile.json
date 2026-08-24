@@ -2,7 +2,7 @@
   "$schema": "../../schemas/workflow-profile.schema.json",
   "schemaVersion": 1,
   "id": "default",
-  "description": "Portable defaults for repositories without a project-specific workflow profile.",
+  "description": "供尚未配置项目专属工作流 Profile 的仓库使用的可移植默认值。",
   "taskModel": {
     "intentRoutes": {
       "analysis": ["analysis", "capture"],

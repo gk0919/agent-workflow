@@ -1,5 +1,5 @@
-import type { PluginJsonValue } from '../../src/contracts/json.js';
-import type { SourceCaptureResult } from '../../src/contracts/capabilities.js';
+import type { PluginJsonValue } from '../../contracts/json.js';
+import type { SourceCaptureResult } from '../../contracts/capabilities.js';
 
 export interface McpSourceToolResult {
   readonly content?: unknown;
@@ -24,7 +24,7 @@ interface SanitizationState {
 
 const SIGNED_URL_PARAMETER = /([?&](?:amp;)?(?:access_token|ossaccesskeyid|signature|token|x-amz-credential|x-amz-security-token|x-amz-signature)=)[^&#\s<>"']*/gi;
 
-/** Keeps surrounding content while making embedded signed URLs unusable in logs and artifacts. */
+/** 保留上下文，同时让嵌入的签名 URL 无法在日志或产物中继续使用。 */
 const redactSignedUrlParameters = (value: string): string =>
   value.replace(SIGNED_URL_PARAMETER, '$1[redacted]');
 
@@ -100,7 +100,7 @@ const parseText = (value: string): unknown => {
   }
 };
 
-/** Converts an untrusted MCP result into bounded, JSON-only workflow facts. */
+/** 把不可信 MCP 结果转换成有界且仅含 JSON 的工作流事实。 */
 export const toSourceCaptureResult = (
   result: McpSourceToolResult,
   context: SourceResultContext,
@@ -108,7 +108,7 @@ export const toSourceCaptureResult = (
   const blocks = textBlocks(result.content);
   if (result.isError) {
     const detail = redactSignedUrlParameters(blocks.join('\n')).slice(0, 1_000) ||
-      'MCP tool returned isError=true';
+      'MCP 工具返回 isError=true';
     throw new Error(`MCP 工具 ${context.tool} 执行失败：${detail}`);
   }
   const state: SanitizationState = {

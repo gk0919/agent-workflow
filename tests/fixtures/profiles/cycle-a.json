@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "extends": "tests/fixtures/profiles/cycle-b.json",
+  "extends": "workflow:tests/fixtures/profiles/cycle-b.json",
   "id": "cycle-a",
-  "description": "First cycle fixture."
+  "description": "第一份循环引用夹具。"
 }

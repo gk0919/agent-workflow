@@ -34,8 +34,10 @@ Project Tasks / Runtime
 2. `src/config/` 负责发现宿主项目并解析路径；Core 和 Validator 不自行猜测仓库根目录。
 3. `src/core/` 只依赖配置层和通用资源，不包含项目名称、项目 Skill 或业务词汇。
 4. `src/validators/` 可以验证 Core、资源和宿主组合结果，但不得写业务状态。
-5. `resources/profiles/default/` 必须能脱离当前项目独立通过 Profile 与路由契约测试。
-6. `.agent-workflow/profile/` 可以引用 `.agents/skills/` 和项目文档，但不得修改通用路由语义。
+5. `src/plugins/` 只实现可复用的正式 Plugin，不包含项目 endpoint、Token 环境变量、编号格式或工具映射；宿主只能通过公开 package export 使用。
+6. `examples/` 只展示生成结果，不是宿主依赖入口，也不得出现在 package export 中。
+7. `resources/profiles/default/` 必须能脱离当前项目独立通过 Profile 与路由契约测试。
+8. `.agent-workflow/profile/` 可以引用 `.agents/skills/` 和项目文档，但不得修改通用路由语义。
 
 ## 状态与版本
 

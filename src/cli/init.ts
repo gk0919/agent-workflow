@@ -71,10 +71,10 @@ const printUsage = (): void => {
     '  agent-workflow init [options]',
     '',
     'Options:',
-    '  --profile-id <id>  Project Profile id (default: derived from package name).',
-    '  --check            Check initialized files without writing.',
-    '  --dry-run          Show planned changes without writing.',
-    '  --help             Show this help.',
+    '  --profile-id <id>  项目 Profile 标识（默认从 package 名称推导）。',
+    '  --check            检查初始化文件，不执行写入。',
+    '  --dry-run          显示计划修改，不执行写入。',
+    '  --help             显示帮助。',
     '',
   ].join('\n'));
 };
@@ -112,7 +112,7 @@ const parseArguments = (args: string[], packageName: unknown): InitOptions => {
     if (argument === '--profile-id') {
       const value = args[index + 1];
       if (!value) {
-        throw new Error('--profile-id requires a value.');
+        throw new Error('--profile-id 需要提供值。');
       }
       options.profileId = value;
       index += 1;
@@ -122,13 +122,13 @@ const parseArguments = (args: string[], packageName: unknown): InitOptions => {
       options.profileId = argument.slice('--profile-id='.length);
       continue;
     }
-    throw new Error(`Unknown option: ${argument}`);
+    throw new Error(`未知选项：${argument}`);
   }
   if (options.check && options.dryRun) {
-    throw new Error('--check and --dry-run cannot be used together.');
+    throw new Error('--check 与 --dry-run 不能同时使用。');
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.profileId)) {
-    throw new Error('--profile-id must contain lowercase letters, numbers and hyphens only.');
+    throw new Error('--profile-id 只能包含小写字母、数字和连字符。');
   }
   return options;
 };
@@ -163,7 +163,7 @@ const ensureDirectory = (relativePath: string, options: InitOptions): void => {
   if (options.check) {
     reportMissing(`${relativePath}/`);
   } else if (options.dryRun) {
-    process.stdout.write(`[plan] create ${relativePath}/\n`);
+    process.stdout.write(`[plan] 创建 ${relativePath}/\n`);
   } else {
     fs.mkdirSync(targetPath, { recursive: true });
     process.stdout.write(`[created] ${relativePath}/\n`);
@@ -178,7 +178,7 @@ const ensureFile = (
   const targetPath = path.join(repositoryRoot, relativePath);
   if (fs.existsSync(targetPath)) {
     if (!fs.statSync(targetPath).isFile()) {
-      throw new Error(`${relativePath} exists but is not a file.`);
+      throw new Error(`${relativePath} 已存在，但不是文件。`);
     }
     process.stdout.write(`[kept] ${relativePath}\n`);
     return;
@@ -186,7 +186,7 @@ const ensureFile = (
   if (options.check) {
     reportMissing(relativePath);
   } else if (options.dryRun) {
-    process.stdout.write(`[plan] create ${relativePath}\n`);
+    process.stdout.write(`[plan] 创建 ${relativePath}\n`);
   } else {
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.writeFileSync(targetPath, content, 'utf8');
@@ -211,7 +211,7 @@ const ensureManagedFile = (
     return;
   }
   if (options.dryRun) {
-    process.stdout.write(`[plan] update ${relativePath}\n`);
+    process.stdout.write(`[plan] 更新 ${relativePath}\n`);
     return;
   }
   let update;
@@ -231,24 +231,24 @@ const ensurePackageScripts = (
   options: InitOptions,
 ): void => {
   if (packageJson.scripts !== undefined && !isJsonObject(packageJson.scripts)) {
-    throw new Error('package.json scripts must be an object.');
+    throw new Error('package.json 的 scripts 必须是对象。');
   }
   const scriptEntries = Object.entries(packageJson.scripts ?? {});
   if (scriptEntries.some(([, command]) => typeof command !== 'string')) {
-    throw new Error('package.json scripts values must be strings.');
+    throw new Error('package.json 的 scripts 值必须是字符串。');
   }
   const scripts = Object.fromEntries(scriptEntries) as Record<string, string>;
   const conflicts = Object.entries(HOST_PACKAGE_SCRIPTS)
     .filter(([name, command]) => scripts[name] !== undefined && scripts[name] !== command);
   if (conflicts.length > 0) {
     conflicts.forEach(([name, command]) =>
-      process.stderr.write(`[conflict] package.json scripts.${name} must be ${JSON.stringify(command)}\n`));
-    throw new Error('Resolve conflicting workflow package scripts before running init again.');
+      process.stderr.write(`[conflict] package.json scripts.${name} 必须为 ${JSON.stringify(command)}\n`));
+    throw new Error('请先解决 package.json 中冲突的工作流脚本，再重新运行 init。');
   }
   const missing = Object.entries(HOST_PACKAGE_SCRIPTS)
     .filter(([name]) => scripts[name] === undefined);
   if (missing.length === 0) {
-    process.stdout.write('[ok] package.json workflow scripts\n');
+    process.stdout.write('[ok] package.json 工作流脚本\n');
     return;
   }
   if (options.check) {
@@ -256,7 +256,7 @@ const ensurePackageScripts = (
     return;
   }
   if (options.dryRun) {
-    process.stdout.write(`[plan] add ${missing.length} package.json workflow scripts\n`);
+    process.stdout.write(`[plan] 添加 ${missing.length} 个 package.json 工作流脚本\n`);
     return;
   }
   const indentation = packageContent.match(/\n([\t ]+)"/)?.[1] ?? '  ';
@@ -264,7 +264,7 @@ const ensurePackageScripts = (
   packageJson.scripts = { ...scripts, ...Object.fromEntries(missing) };
   const serialized = `${JSON.stringify(packageJson, null, indentation)}\n`.replaceAll('\n', lineEnding);
   fs.writeFileSync(hostPackagePath, serialized, 'utf8');
-  process.stdout.write(`[updated] package.json added ${missing.length} workflow scripts\n`);
+  process.stdout.write(`[updated] package.json，已添加 ${missing.length} 个工作流脚本\n`);
 };
 
 const buildConfig = (): string => `${JSON.stringify({
@@ -291,7 +291,7 @@ const buildProfile = (profileId: string): string => `${JSON.stringify({
   schemaVersion: 1,
   extends: 'workflow:resources/profiles/default/profile.json',
   id: profileId,
-  description: `Project-specific workflow bindings for ${profileId}.`,
+  description: `${profileId} 的项目专属工作流绑定。`,
   governance: {
     markdownFiles: ['AGENTS.md', '.agent-workflow/profile/policy.md'],
   },
@@ -303,14 +303,14 @@ const buildProfile = (profileId: string): string => `${JSON.stringify({
 const assertFileTarget = (relativePath: string): void => {
   const targetPath = path.join(repositoryRoot, relativePath);
   if (fs.existsSync(targetPath) && !fs.statSync(targetPath).isFile()) {
-    throw new Error(`${relativePath} exists but is not a file.`);
+    throw new Error(`${relativePath} 已存在，但不是文件。`);
   }
 };
 
 const assertDirectoryTarget = (relativePath: string): void => {
   const targetPath = path.join(repositoryRoot, relativePath);
   if (fs.existsSync(targetPath) && !fs.statSync(targetPath).isDirectory()) {
-    throw new Error(`${relativePath} exists but is not a directory.`);
+    throw new Error(`${relativePath} 已存在，但不是目录。`);
   }
 };
 
@@ -331,12 +331,12 @@ const assertManagedTarget = (
 
 export const main = (args: string[] = process.argv.slice(2)): number => {
   if (!fs.existsSync(hostPackagePath)) {
-    throw new Error(`package.json not found in ${repositoryRoot}`);
+    throw new Error(`${repositoryRoot} 中未找到 package.json。`);
   }
   const packageContent = fs.readFileSync(hostPackagePath, 'utf8');
   const parsedPackage: unknown = JSON.parse(packageContent);
   if (!isJsonObject(parsedPackage)) {
-    throw new Error('package.json must contain an object.');
+    throw new Error('package.json 必须包含一个对象。');
   }
   const hostPackage = parsedPackage as PackageMetadata;
   const options = parseArguments(args, hostPackage.name);
@@ -381,17 +381,17 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
   ensureFile('.agent-workflow/profile/profile.json', buildProfile(options.profileId), options);
   ensureFile(
     '.agent-workflow/profile/policy.md',
-    '# Project Workflow Policy\n\nDocument project-specific workflow facts and reference them from AGENTS.md or a selected Skill.\n',
+    '# 项目工作流策略\n\n在此记录项目专属工作流事实，并从 AGENTS.md 或命中的 Skill 中引用。\n',
     options,
   );
   ensureFile(
     '.agent-workflow/profile/knowledge/README.md',
-    '# Project Knowledge\n\nReusable project knowledge is staged and approved here; runtime logs and credentials are never stored here.\n',
+    '# 项目知识\n\n可复用的项目知识在此暂存并经过批准；运行日志和凭据绝不存放在此处。\n',
     options,
   );
   ensureFile(
     '.agent-workflow/runtime/README.md',
-    '# Runtime\n\nThis directory stores anonymous workflow events and temporary state. Only this README is committed.\n',
+    '# Runtime\n\n此目录保存匿名工作流事件和临时状态，只提交本说明文件。\n',
     options,
   );
   ensureFile('.agents/skills/.gitkeep', '', options);
@@ -405,15 +405,15 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
   ensureManagedFile('.gitignore', gitignoreBlock, GITIGNORE_BLOCK, options);
 
   if (options.check && failureCount > 0) {
-    process.stderr.write(`Initialization check failed: ${failureCount} missing item(s).\n`);
+    process.stderr.write(`初始化检查失败：缺少 ${failureCount} 项。\n`);
     return 1;
   }
   if (options.dryRun) {
-    process.stdout.write('Init dry run complete. No files were changed.\n');
+    process.stdout.write('初始化试运行完成，未修改任何文件。\n');
   } else if (options.check) {
-    process.stdout.write('Initialization check passed.\n');
+    process.stdout.write('初始化检查通过。\n');
   } else {
-    process.stdout.write('Initialization complete. Run npm run workflow:setup next.\n');
+    process.stdout.write('初始化完成，下一步请运行 npm run workflow:setup。\n');
   }
   return 0;
 };

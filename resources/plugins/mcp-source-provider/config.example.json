@@ -5,21 +5,21 @@
   "plugins": [
     {
       "id": "mcp-source-provider",
-      "module": "@gk0919/agent-workflow/examples/mcp-source-provider",
+      "module": "@gk0919/agent-workflow/plugins/mcp-source-provider",
       "permissions": ["network:connect", "secrets:read"],
       "options": {
-        "endpoint": "http://192.168.129.30:9090/mcp/dev",
-        "allowInsecureHttp": true,
-        "tokenEnv": "JACKYUN_MCP_TOKEN",
-        "sourceType": "jackyun-mcp",
+        "endpoint": "https://mcp.example.com/mcp",
+        "allowInsecureHttp": false,
+        "tokenEnv": "PROJECT_MCP_TOKEN",
+        "sourceType": "project-mcp",
         "routes": {
           "requirement": {
             "tool": "query_requirement",
-            "referencePattern": "^XQ"
+            "referencePattern": "^REQ-"
           },
           "defect": {
             "tool": "query_bug",
-            "referencePattern": "^BG"
+            "referencePattern": "^BUG-"
           }
         }
       }

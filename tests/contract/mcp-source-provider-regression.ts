@@ -8,11 +8,13 @@ import {
   parseMcpSourceProviderOptions,
   type McpSourceConnection,
   type McpSourceConnector,
-} from '../../examples/mcp-source-provider/index.js';
+} from '../../src/plugins/mcp-source-provider/index.js';
 import type { SourceProviderService } from '../../src/contracts/capabilities.js';
 import type { PluginJsonObject } from '../../src/contracts/json.js';
+import { loadWorkflowProfile } from '../../src/config/workflow-config.js';
 import {
   readSourceCaptureArguments,
+  resolveSourceProviderId,
   selectSourceProvider,
 } from '../../src/host-node/source-capture-cli.js';
 import { WorkflowPluginRuntime } from '../../src/host-node/index.js';
@@ -67,15 +69,15 @@ const captureContract = async (): Promise<void> => {
           content: [
             {
               type: 'text',
-              text: '{"screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"open","title":"Requirement title"}',
+              text: '{"screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"待处理","title":"需求标题"}',
             },
             { type: 'image', data: 'excluded-binary-content' },
           ],
-          structuredContent: { owner: 'Example owner' },
+          structuredContent: { owner: '示例负责人' },
         };
       }
       return {
-        content: [{ type: 'text', text: 'Defect detail' }],
+        content: [{ type: 'text', text: '缺陷详情' }],
       };
     },
     async close() {
@@ -119,7 +121,7 @@ const captureContract = async (): Promise<void> => {
     now: () => new Date('2026-08-21T00:00:00.000Z'),
   });
   const requirement = await provider.capture({
-    entry: 'requirement',
+    entry: 'pool',
     reference: 'XQ123456',
   });
   assert.equal(requirement.capturedAt, '2026-08-21T00:00:00.000Z');
@@ -127,15 +129,15 @@ const captureContract = async (): Promise<void> => {
   assert.equal(requirement.sourceType, 'test-mcp');
   assert.deepEqual(requirement.facts.result, {
     screenshot: 'https://files.example.test/a.png?OSSAccessKeyId=[redacted]&Signature=[redacted]',
-    status: 'open',
-    title: 'Requirement title',
+    status: '待处理',
+    title: '需求标题',
   });
   assert.doesNotMatch(JSON.stringify(requirement), /Signature=secret/);
-  assert.deepEqual(requirement.facts.structuredContent, { owner: 'Example owner' });
+  assert.deepEqual(requirement.facts.structuredContent, { owner: '示例负责人' });
   assert.doesNotMatch(JSON.stringify(requirement), /excluded-binary-content/);
 
-  const defect = await provider.capture({ entry: 'defect', reference: 'BG654321' });
-  assert.equal(defect.facts.result, 'Defect detail');
+  const defect = await provider.capture({ entry: 'pool', reference: 'BG654321' });
+  assert.equal(defect.facts.result, '缺陷详情');
   assert.deepEqual(calls, [
     { arguments: { sn: 'XQ123456' }, name: 'query_requirement' },
     {
@@ -148,6 +150,10 @@ const captureContract = async (): Promise<void> => {
   await assert.rejects(
     provider.capture({ entry: 'defect', reference: 'XQ-invalid' }),
     /referencePattern/,
+  );
+  await assert.rejects(
+    provider.capture({ entry: 'pool', reference: 'UNKNOWN' }),
+    /没有 referencePattern 匹配/,
   );
   await provider.close();
   await provider.close();
@@ -162,7 +168,7 @@ const failureContract = async (): Promise<void> => {
   const missingSecret = createMcpSourceProvider(providerOptions(), {
     connect: async (options) => {
       options.readToken();
-      throw new Error('connector must not continue');
+      throw new Error('Connector 不应继续执行');
     },
     environment: {},
   });
@@ -176,7 +182,7 @@ const failureContract = async (): Promise<void> => {
   const ambiguous = createMcpSourceProvider(providerOptions(), {
     connect: async () => ({
       async callTool() {
-        throw new Error('ambiguous schema must fail before callTool');
+        throw new Error('Schema 存在歧义时应在 callTool 前失败');
       },
       async close() {
         closeCount += 1;
@@ -207,7 +213,7 @@ const failureContract = async (): Promise<void> => {
     connect: async () => ({
       async callTool() {
         return {
-          content: [{ type: 'text', text: 'not found' }],
+          content: [{ type: 'text', text: '未找到' }],
           isError: true,
         };
       },
@@ -226,9 +232,36 @@ const failureContract = async (): Promise<void> => {
   });
   await assert.rejects(
     toolFailure.capture({ entry: 'requirement', reference: 'XQ123456' }),
-    /not found/,
+    /未找到/,
   );
   await toolFailure.close();
+
+  let routeConnectCount = 0;
+  const ambiguousRoute = createMcpSourceProvider({
+    ...providerOptions(),
+    routes: {
+      requirement: {
+        referencePattern: '^XQ',
+        tool: 'query_requirement',
+      },
+      'requirement-alias': {
+        referencePattern: '^XQ',
+        tool: 'query_requirement',
+      },
+    },
+  }, {
+    connect: async () => {
+      routeConnectCount += 1;
+      throw new Error('路由存在歧义时应在连接前失败');
+    },
+    environment: { TEST_MCP_TOKEN: 'test-token-not-a-secret' },
+  });
+  await assert.rejects(
+    ambiguousRoute.capture({ entry: 'pool', reference: 'XQ123456' }),
+    /同时匹配多个 Route/,
+  );
+  assert.equal(routeConnectCount, 0);
+  await ambiguousRoute.close();
 };
 
 const cliContract = (): void => {
@@ -248,13 +281,25 @@ const cliContract = (): void => {
   const first: SourceProviderService = {
     id: 'first',
     async capture() {
-      throw new Error('not called');
+      throw new Error('不应调用');
     },
   };
   const second: SourceProviderService = { ...first, id: 'second' };
   assert.equal(selectSourceProvider([first], ''), first);
   assert.equal(selectSourceProvider([first, second], 'second'), second);
   assert.throws(() => selectSourceProvider([first, second], ''), /多个/);
+
+  const profile = loadWorkflowProfile('workflow:resources/profiles/default/profile.json');
+  assert.equal(resolveSourceProviderId(profile, 'pool', ''), 'project-source-provider');
+  assert.equal(resolveSourceProviderId(profile, 'pool', 'second'), 'second');
+  assert.throws(
+    () => resolveSourceProviderId(profile, 'direct', ''),
+    /不是可执行 Connector/,
+  );
+  assert.throws(
+    () => resolveSourceProviderId(profile, 'missing', ''),
+    /未绑定 Entry/,
+  );
 };
 
 const pluginLifecycleContract = async (): Promise<void> => {
@@ -262,7 +307,7 @@ const pluginLifecycleContract = async (): Promise<void> => {
     plugins: [{
       configuration: {
         id: 'mcp-source-provider',
-        module: '@gk0919/agent-workflow/examples/mcp-source-provider',
+        module: '@gk0919/agent-workflow/plugins/mcp-source-provider',
         options: providerOptions(),
         permissions: ['network:connect', 'secrets:read'],
       },
@@ -275,7 +320,7 @@ const pluginLifecycleContract = async (): Promise<void> => {
   assert.equal(host.state, 'idle');
 };
 
-/** Covers option validation, secret isolation, schema inference, lifecycle and CLI selection. */
+/** 覆盖选项校验、凭据隔离、Schema 推断、生命周期和 CLI 选择。 */
 export const main = async (): Promise<number> => {
   try {
     validationContract();

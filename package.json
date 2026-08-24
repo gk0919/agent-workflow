@@ -2,7 +2,7 @@
   "name": "@gk0919/agent-workflow",
   "version": "1.0.0",
   "private": false,
-  "description": "Portable, profile-driven workflow engine for coding agents.",
+  "description": "面向编码智能体的可移植、Profile 驱动工作流引擎。",
   "type": "module",
   "types": "./dist/src/plugin-sdk/index.d.ts",
   "exports": {
@@ -30,10 +30,11 @@
       "types": "./dist/src/mcp/index.d.ts",
       "import": "./dist/src/mcp/index.js"
     },
-    "./examples/mcp-source-provider": {
-      "types": "./dist/examples/mcp-source-provider/index.d.ts",
-      "import": "./dist/examples/mcp-source-provider/index.js"
+    "./plugins/mcp-source-provider": {
+      "types": "./dist/src/plugins/mcp-source-provider/index.d.ts",
+      "import": "./dist/src/plugins/mcp-source-provider/index.js"
     },
+    "./plugins/mcp-source-provider/config.example.json": "./resources/plugins/mcp-source-provider/config.example.json",
     "./schemas/plugin-manifest.json": "./resources/schemas/plugin-manifest.schema.json",
     "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
     "./package.json": "./package.json"
@@ -92,6 +93,7 @@
     "docs/",
     "examples/",
     "resources/",
+    "tests/fixtures/",
     "migrations/",
     "README.md",
     "CHANGELOG.md"

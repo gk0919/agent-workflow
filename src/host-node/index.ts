@@ -17,6 +17,7 @@ export type { PluginRuntimeInput, PluginRuntimeOptions } from '../core/plugin-ru
 const PACKAGE_SPECIFIER_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*(?:\/[^\\]+)?$/;
 
 interface PackageMetadata {
+  name?: unknown;
   exports?: unknown;
   main?: unknown;
   module?: unknown;
@@ -62,8 +63,20 @@ const selectImportTarget = (value: unknown): string | undefined => {
 /** Resolves the import condition from a direct workspace dependency. */
 const resolvePackageImport = (specifier: string, workspaceRoot: string): string => {
   const { name, subpath } = packageParts(specifier);
-  const packageDirectory = path.join(workspaceRoot, 'node_modules', ...name.split('/'));
-  const metadataPath = path.join(packageDirectory, 'package.json');
+  const dependencyDirectory = path.join(workspaceRoot, 'node_modules', ...name.split('/'));
+  const dependencyMetadataPath = path.join(dependencyDirectory, 'package.json');
+  const workspaceMetadataPath = path.join(workspaceRoot, 'package.json');
+  let packageDirectory = dependencyDirectory;
+  let metadataPath = dependencyMetadataPath;
+  if (!existsSync(dependencyMetadataPath) && existsSync(workspaceMetadataPath)) {
+    const workspaceMetadata = JSON.parse(
+      readFileSync(workspaceMetadataPath, 'utf8'),
+    ) as PackageMetadata;
+    if (workspaceMetadata.name === name) {
+      packageDirectory = workspaceRoot;
+      metadataPath = workspaceMetadataPath;
+    }
+  }
   if (!existsSync(metadataPath)) {
     const requireFromWorkspace = createRequire(path.join(workspaceRoot, 'package.json'));
     return requireFromWorkspace.resolve(specifier);

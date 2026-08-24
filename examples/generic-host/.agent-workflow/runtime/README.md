@@ -1,3 +1,3 @@
 # Runtime
 
-This directory stores anonymous workflow events and temporary state. Only this README is committed.
+此目录保存匿名工作流事件和临时状态，只提交本说明文件。

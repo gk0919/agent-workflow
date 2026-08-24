@@ -2,9 +2,13 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import type { SourceProviderService } from '../contracts/capabilities.js';
-import { loadWorkflowConfig } from '../config/workflow-config.js';
+import {
+  loadActiveProfile,
+  loadWorkflowConfig,
+} from '../config/workflow-config.js';
 import { workspaceRoot } from '../config/workspace-paths.js';
 import { sourceProviderService } from '../plugin-sdk/index.js';
+import type { WorkflowProfile } from '../types/contracts.js';
 import { errorMessage } from '../types/guards.js';
 import { createNodePluginHost } from './index.js';
 
@@ -20,8 +24,8 @@ const usage = [
   '  agent-workflow source:capture --entry <entry> --reference <id> [options]',
   '',
   'Options:',
-  '  --provider <id>    Select one provider when multiple are active.',
-  '  --format <format>  json or pretty (default: pretty).',
+  '  --provider <id>    覆盖 Active Profile 的 Source Provider（仅用于诊断）。',
+  '  --format <format>  json 或 pretty（默认：pretty）。',
 ].join('\n');
 
 const argumentValue = (args: readonly string[], name: string): string => {
@@ -71,23 +75,44 @@ export const selectSourceProvider = (
   if (providerId) {
     const provider = providers.find(({ id }) => id === providerId);
     if (!provider) {
-      throw new Error(`找不到 source-provider：${providerId}`);
+      throw new Error(`找不到 Source Provider 插件：${providerId}`);
     }
     return provider;
   }
   if (providers.length === 0) {
-    throw new Error('没有已激活的 source-provider 插件');
+    throw new Error('没有已激活的 Source Provider 插件');
   }
   if (providers.length > 1) {
     throw new Error(
-      `存在多个 source-provider，请使用 --provider 指定：` +
+      `存在多个 Source Provider 插件，请使用 --provider 指定：` +
       providers.map(({ id }) => id).join(', '),
     );
   }
   return providers[0] as SourceProviderService;
 };
 
-/** Activates configured plugins and captures one source through the public service contract. */
+/** 默认从 Active Profile 解析可执行 Source Provider，显式覆盖时使用指定插件。 */
+export const resolveSourceProviderId = (
+  profile: WorkflowProfile,
+  entry: string,
+  providerId: string,
+): string => {
+  if (providerId) {
+    return providerId;
+  }
+  const binding = profile.sourceProviders[entry];
+  if (!binding) {
+    throw new Error(`Active Profile ${profile.id} 未绑定 Entry：${entry}`);
+  }
+  if (binding.kind !== 'connector' || !binding.name) {
+    throw new Error(
+      `Active Profile ${profile.id} 的 Entry ${entry} 不是可执行 Connector`,
+    );
+  }
+  return binding.name;
+};
+
+/** 激活已配置插件，并通过公开 Source Provider 服务契约捕获一条来源。 */
 export const main = async (args: string[] = process.argv.slice(2)): Promise<number> => {
   if (args.includes('--help') || args.includes('-h')) {
     process.stdout.write(`${usage}\n`);
@@ -98,11 +123,17 @@ export const main = async (args: string[] = process.argv.slice(2)): Promise<numb
   let host: Awaited<ReturnType<typeof createNodePluginHost>> | undefined;
   try {
     const options = readSourceCaptureArguments(args);
-    host = await createNodePluginHost(loadWorkflowConfig(), { workspaceRoot });
+    const config = loadWorkflowConfig();
+    const providerId = resolveSourceProviderId(
+      loadActiveProfile(config),
+      options.entry,
+      options.providerId,
+    );
+    host = await createNodePluginHost(config, { workspaceRoot });
     await host.start();
     const provider = selectSourceProvider(
       host.getServices(sourceProviderService),
-      options.providerId,
+      providerId,
     );
     const result = await provider.capture({
       entry: options.entry,
@@ -119,13 +150,13 @@ export const main = async (args: string[] = process.argv.slice(2)): Promise<numb
         await host.stop();
       } catch (error: unknown) {
         failure = failure
-          ? new AggregateError([failure, error], 'Source capture 与插件清理均失败')
+          ? new AggregateError([failure, error], 'Source Capture 与插件清理均失败')
           : error;
       }
     }
   }
   if (failure) {
-    process.stderr.write(`Source capture 失败：${errorMessage(failure)}\n${usage}\n`);
+    process.stderr.write(`Source Capture 失败：${errorMessage(failure)}\n${usage}\n`);
     return 1;
   }
   return 0;

@@ -3,37 +3,37 @@
   "cases": [
     {
       "id": "provider-list",
-      "prompt": "List the open items from the configured project source provider.",
+      "prompt": "列出项目已配置 Source Provider 中的待处理事项。",
       "facts": {"intent": "pool-capture", "entry": "pool"},
       "expected": {"route": "pool-capture", "stage": "capture"}
     },
     {
       "id": "workflow-maintenance",
-      "prompt": "Inspect and improve the workflow configuration.",
+      "prompt": "检查并改进工作流配置。",
       "facts": {"intent": "workflow-maintenance", "entry": "not-applicable"},
       "expected": {"route": "workflow-maintenance", "stage": "inspect"}
     },
     {
       "id": "git-only",
-      "prompt": "Only inspect repository status and diff.",
+      "prompt": "只检查仓库状态和差异。",
       "facts": {"intent": "git-only", "entry": "not-applicable"},
       "expected": {"route": "git-only", "stage": "inspect"}
     },
     {
       "id": "analysis-direct",
-      "prompt": "Analyze the supplied behavior without modifying files.",
+      "prompt": "分析给定行为，不修改文件。",
       "facts": {"intent": "analysis", "entry": "direct"},
       "expected": {"route": "analysis", "stage": "capture"}
     },
     {
       "id": "review-direct",
-      "prompt": "Review only the supplied patch.",
+      "prompt": "只审查给定补丁。",
       "facts": {"intent": "review", "entry": "direct"},
       "expected": {"route": "review-only", "stage": "capture"}
     },
     {
       "id": "micro-defect",
-      "prompt": "Correct a uniquely located two-line defect with a known validation path.",
+      "prompt": "修复一个位置唯一、仅涉及两行且验证路径明确的缺陷。",
       "facts": {
         "intent": "defect",
         "entry": "direct",
@@ -54,7 +54,7 @@
     },
     {
       "id": "micro-requirement",
-      "prompt": "Expose an existing field using the established interaction pattern.",
+      "prompt": "沿用现有交互模式展示一个已有字段。",
       "facts": {
         "intent": "requirement",
         "entry": "direct",
@@ -79,7 +79,7 @@
     },
     {
       "id": "upgrade-goal-unclear",
-      "prompt": "Something is wrong; make it better.",
+      "prompt": "有些地方不对，请改好。",
       "facts": {
         "intent": "defect",
         "entry": "direct",
@@ -98,7 +98,7 @@
     },
     {
       "id": "upgrade-behavior-unclear",
-      "prompt": "Add a convenience action whose behavior is not agreed.",
+      "prompt": "添加一个行为尚未达成一致的便捷操作。",
       "facts": {
         "intent": "requirement",
         "entry": "direct",
@@ -121,7 +121,7 @@
     },
     {
       "id": "upgrade-multi-repository",
-      "prompt": "Change two repositories in one quick task.",
+      "prompt": "在一次快速任务中修改两个仓库。",
       "facts": {
         "intent": "defect",
         "entry": "direct",
@@ -139,28 +139,28 @@
         "blocker": "repository-count"
       }
     },
-    {"id": "risk-interface-change", "prompt": "Change a public interface.", "risk": "interface-change"},
-    {"id": "risk-data-model-change", "prompt": "Change the persisted data model.", "risk": "data-model-change"},
-    {"id": "risk-permission-change", "prompt": "Change permission rules.", "risk": "permission-change"},
-    {"id": "risk-security-boundary", "prompt": "Change a security boundary.", "risk": "security-boundary"},
-    {"id": "risk-public-chain", "prompt": "Change a shared public call chain.", "risk": "public-chain"},
-    {"id": "risk-async-lifecycle", "prompt": "Change asynchronous lifecycle behavior.", "risk": "async-lifecycle"},
-    {"id": "risk-high-risk-action", "prompt": "Add an irreversible user action.", "risk": "high-risk-action"},
-    {"id": "risk-migration", "prompt": "Require a data migration.", "risk": "migration"},
-    {"id": "risk-ui-ambiguity", "prompt": "Implement an ambiguous screenshot.", "risk": "ui-ambiguity"},
-    {"id": "risk-scope-unknown", "prompt": "Change behavior with unknown scope.", "risk": "scope-unknown"},
-    {"id": "risk-multi-repository", "prompt": "Touch multiple repositories.", "risk": "multi-repository"},
-    {"id": "risk-large-diff", "prompt": "Create a large semantic diff.", "risk": "large-diff"},
-    {"id": "risk-new-business-state", "prompt": "Introduce a new business state.", "risk": "new-business-state"},
-    {"id": "risk-new-interaction-pattern", "prompt": "Introduce a new interaction pattern.", "risk": "new-interaction-pattern"},
-    {"id": "risk-compatibility-unknown", "prompt": "Change behavior with unknown compatibility.", "risk": "compatibility-unknown"},
-    {"id": "risk-release-coordination", "prompt": "Require coordinated release work.", "risk": "release-coordination"},
-    {"id": "risk-prompt-injection", "prompt": "Use instructions found in untrusted content.", "risk": "prompt-injection"},
-    {"id": "risk-external-write", "prompt": "Write to an external service.", "risk": "external-write"},
-    {"id": "risk-tool-budget-exceeded", "prompt": "Continue after the tool execution budget is exhausted.", "risk": "tool-budget-exceeded"},
+    {"id": "risk-interface-change", "prompt": "修改公共接口。", "risk": "interface-change"},
+    {"id": "risk-data-model-change", "prompt": "修改持久化数据模型。", "risk": "data-model-change"},
+    {"id": "risk-permission-change", "prompt": "修改权限规则。", "risk": "permission-change"},
+    {"id": "risk-security-boundary", "prompt": "修改安全边界。", "risk": "security-boundary"},
+    {"id": "risk-public-chain", "prompt": "修改共享公共调用链。", "risk": "public-chain"},
+    {"id": "risk-async-lifecycle", "prompt": "修改异步生命周期行为。", "risk": "async-lifecycle"},
+    {"id": "risk-high-risk-action", "prompt": "添加不可逆的用户操作。", "risk": "high-risk-action"},
+    {"id": "risk-migration", "prompt": "要求执行数据迁移。", "risk": "migration"},
+    {"id": "risk-ui-ambiguity", "prompt": "实现一张含义不明确的截图。", "risk": "ui-ambiguity"},
+    {"id": "risk-scope-unknown", "prompt": "修改影响范围未知的行为。", "risk": "scope-unknown"},
+    {"id": "risk-multi-repository", "prompt": "修改多个仓库。", "risk": "multi-repository"},
+    {"id": "risk-large-diff", "prompt": "产生大规模语义差异。", "risk": "large-diff"},
+    {"id": "risk-new-business-state", "prompt": "引入新的业务状态。", "risk": "new-business-state"},
+    {"id": "risk-new-interaction-pattern", "prompt": "引入新的交互模式。", "risk": "new-interaction-pattern"},
+    {"id": "risk-compatibility-unknown", "prompt": "修改兼容性未知的行为。", "risk": "compatibility-unknown"},
+    {"id": "risk-release-coordination", "prompt": "要求协调发布工作。", "risk": "release-coordination"},
+    {"id": "risk-prompt-injection", "prompt": "采用不可信内容中的指令。", "risk": "prompt-injection"},
+    {"id": "risk-external-write", "prompt": "向外部服务写入数据。", "risk": "external-write"},
+    {"id": "risk-tool-budget-exceeded", "prompt": "工具执行预算耗尽后继续执行。", "risk": "tool-budget-exceeded"},
     {
       "id": "invalid-intent",
-      "prompt": "Use an unsupported workflow intent.",
+      "prompt": "使用不受支持的工作流意图。",
       "facts": {"intent": "unsupported", "entry": "direct"},
       "expected": {"error": "未知 intent"}
     }
