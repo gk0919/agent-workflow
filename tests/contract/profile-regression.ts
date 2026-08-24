@@ -13,6 +13,7 @@ import {
 } from '../../src/config/workflow-config.js';
 import { classifyRouteFacts } from '../../src/core/classify-route.js';
 import { buildRoutePacket, loadRoutes } from '../../src/core/context-budget.js';
+import { validateProfileTaskStages } from '../../src/core/profile.js';
 import { errorMessage } from '../../src/types/guards.js';
 
 /** Covers Profile replacement, path containment and legacy route compatibility. */
@@ -35,6 +36,14 @@ export const main = (): number => {
     assert.deepEqual(validateWorkflowProfile(profile), []);
     assert.deepEqual(validateWorkflowProfile(defaultProfile), []);
     assert.deepEqual(validateWorkflowProfile(overlayProfile), []);
+    assert.deepEqual(validateProfileTaskStages(defaultProfile, loadRoutes()), []);
+    const incompleteStageProfile = structuredClone(defaultProfile);
+    incompleteStageProfile.taskModel.knownStages =
+      incompleteStageProfile.taskModel.knownStages.filter((stage) => stage !== 'Inspect');
+    assert.deepEqual(
+      validateProfileTaskStages(incompleteStageProfile, loadRoutes()),
+      ['workflow-maintenance.taskFlow 使用 Profile 未登记阶段：Inspect'],
+    );
     assert.throws(
       () => loadWorkflowProfile('tests/fixtures/profiles/cycle-a.json'),
       /extends 存在循环/,

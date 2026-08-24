@@ -65,7 +65,10 @@ const captureContract = async (): Promise<void> => {
       if (request.name === 'query_requirement') {
         return {
           content: [
-            { type: 'text', text: '{"title":"Requirement title","status":"open"}' },
+            {
+              type: 'text',
+              text: '{"screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"open","title":"Requirement title"}',
+            },
             { type: 'image', data: 'excluded-binary-content' },
           ],
           structuredContent: { owner: 'Example owner' },
@@ -123,9 +126,11 @@ const captureContract = async (): Promise<void> => {
   assert.equal(requirement.sourceId, 'requirement:XQ123456');
   assert.equal(requirement.sourceType, 'test-mcp');
   assert.deepEqual(requirement.facts.result, {
+    screenshot: 'https://files.example.test/a.png?OSSAccessKeyId=[redacted]&Signature=[redacted]',
     status: 'open',
     title: 'Requirement title',
   });
+  assert.doesNotMatch(JSON.stringify(requirement), /Signature=secret/);
   assert.deepEqual(requirement.facts.structuredContent, { owner: 'Example owner' });
   assert.doesNotMatch(JSON.stringify(requirement), /excluded-binary-content/);
 

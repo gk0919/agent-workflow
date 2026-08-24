@@ -40,6 +40,7 @@
     "knownStages": [
       "Source Capture",
       "Intake",
+      "Inspect",
       "Analyze",
       "PRD",
       "Spec",

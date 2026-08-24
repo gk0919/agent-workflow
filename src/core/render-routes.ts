@@ -54,9 +54,19 @@ const replaceManagedBlock = (content: string, block: string): string => {
   ].join('');
 };
 
+/** Rebuilds the managed table while preserving the document's existing line endings. */
+export const renderRoutesDocument = (
+  content: string,
+  config: RoutesConfig = loadRoutes(),
+): string => {
+  const lineEnding = content.includes('\r\n') ? '\r\n' : '\n';
+  const block = renderRoutesTable(config).replaceAll('\n', lineEnding);
+  return replaceManagedBlock(content, block);
+};
+
 export const checkRoutesDocumentation = () => {
   const content = readFileSync(readmePath, 'utf8');
-  const expected = replaceManagedBlock(content, renderRoutesTable());
+  const expected = renderRoutesDocument(content);
   return {
     content,
     expected,

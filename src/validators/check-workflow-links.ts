@@ -51,7 +51,7 @@ const CORE_REQUIRED_PATHS = [
   'workflow:examples/generic-host/README.md',
   'workflow:examples/generic-host/package.json',
   'workflow:examples/generic-host/AGENTS.md',
-  'workflow:examples/generic-host/.gitignore',
+  'workflow:examples/generic-host/gitignore.template',
   'workflow:examples/generic-host/.agent-workflow/config.json',
   'workflow:examples/generic-host/.agent-workflow/profile/profile.json',
   'workflow:examples/generic-host/.github/workflows/agent-workflow.yml',

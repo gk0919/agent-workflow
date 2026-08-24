@@ -10,15 +10,34 @@ import {
   workflowConfigPath,
 } from '../config/workflow-config.js';
 import { workspaceRoot } from '../config/workspace-paths.js';
+import type { RoutesConfig, WorkflowProfile } from '../types/contracts.js';
 import { errorMessage } from '../types/guards.js';
+import { loadRoutes } from './context-budget.js';
 
 const displayPath = (filePath: string): string =>
   path.relative(workspaceRoot, filePath).split(path.sep).join('/');
+
+/** Ensures every persisted task stage used by Routes is accepted by the Active Profile. */
+export const validateProfileTaskStages = (
+  profile: WorkflowProfile,
+  routes: RoutesConfig,
+): string[] => {
+  const knownStages = new Set(profile.taskModel.knownStages);
+  return Object.entries(routes.routes).flatMap(([routeName, route]) =>
+    (route.taskFlow?.stages ?? [])
+      .filter((stageName) => !knownStages.has(stageName))
+      .map((stageName) =>
+        `${routeName}.taskFlow 使用 Profile 未登记阶段：${stageName}`));
+};
 
 /** Builds a compact report without exposing Profile contents or repository data. */
 export const buildProfileReport = () => {
   const config = loadWorkflowConfig();
   const profile = loadActiveProfile(config);
+  const stageErrors = validateProfileTaskStages(profile, loadRoutes());
+  if (stageErrors.length > 0) {
+    throw new Error(stageErrors.join('；'));
+  }
   const paths = loadWorkflowPaths(config);
   return {
     bindings: Object.fromEntries(

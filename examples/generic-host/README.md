@@ -17,3 +17,8 @@ To copy it into another repository:
 
 The Profile inherits neutral defaults. Objects merge recursively; arrays replace
 their inherited values. Runtime data and local task state remain ignored.
+
+`gitignore.template` is the packaged copy of this example's `.gitignore` because
+npm excludes nested `.gitignore` files from published artifacts. The
+`agent-workflow init` command still generates the real `.gitignore` in consuming
+repositories.

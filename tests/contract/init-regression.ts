@@ -31,6 +31,14 @@ const generatedFiles = [
   'package.json',
 ];
 
+const normalizeLineEndings = (content: string): string =>
+  content.replace(/\r\n?/g, '\n');
+
+const exampleFilePath = (relativePath: string): string => path.join(
+  exampleRoot,
+  relativePath === '.gitignore' ? 'gitignore.template' : relativePath,
+);
+
 const runCli = (hostRoot: string, args: string[]) => spawnSync(
   process.execPath,
   [cliPath, ...args],
@@ -115,10 +123,11 @@ export const main = (): number => {
     }
 
     generatedFiles.forEach((relativePath) => {
-      assert.ok(existsSync(path.join(exampleRoot, relativePath)), `example missing ${relativePath}`);
+      const examplePath = exampleFilePath(relativePath);
+      assert.ok(existsSync(examplePath), `example missing ${relativePath}`);
       assert.equal(
-        readFileSync(path.join(exampleRoot, relativePath), 'utf8'),
-        readFileSync(path.join(hostRoot, relativePath), 'utf8'),
+        normalizeLineEndings(readFileSync(examplePath, 'utf8')),
+        normalizeLineEndings(readFileSync(path.join(hostRoot, relativePath), 'utf8')),
         `example drift: ${relativePath}`,
       );
     });

@@ -58,6 +58,10 @@ import {
 } from '../../src/core/micro-brief.js';
 import { materializeRouteCase } from '../../src/core/route-eval.js';
 import type { RouteEvalSuite } from '../../src/core/route-eval.js';
+import {
+  renderRoutesDocument,
+  renderRoutesTable,
+} from '../../src/core/render-routes.js';
 import type { RouteFacts } from '../../src/types/contracts.js';
 import { errorMessage } from '../../src/types/guards.js';
 import { validateRouteTaskState } from '../../src/core/task-route-guard.js';
@@ -258,6 +262,18 @@ function withClassification(
 export const main = () => {
   try {
     const config = loadRoutes();
+    const routeDocument = [
+      '# Routes',
+      '',
+      renderRoutesTable(config),
+      '',
+    ].join('\n');
+    assert.equal(renderRoutesDocument(routeDocument, config), routeDocument);
+    const windowsRouteDocument = routeDocument.replaceAll('\n', '\r\n');
+    assert.equal(
+      renderRoutesDocument(windowsRouteDocument, config),
+      windowsRouteDocument,
+    );
     const matrixScenarios = Object.entries(config.routes)
       .flatMap(([routeName, route]) =>
         route.entryModes.flatMap((entry) =>
