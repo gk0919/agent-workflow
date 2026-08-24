@@ -4,6 +4,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { buildIssueTrackingRule } from '../../src/validators/check-commit-message.js';
 import {
+  assertRealPathWithin,
   loadActiveProfile,
   loadWorkflowConfig,
   loadWorkflowProfile,
@@ -46,6 +47,30 @@ export const main = (): number => {
       validateProfileTaskStages(incompleteStageProfile, loadRoutes()),
       ['workflow-maintenance.taskFlow 使用 Profile 未登记阶段：Inspect'],
     );
+    const unknownProviderProfile = structuredClone(defaultProfile);
+    unknownProviderProfile.taskModel.providerEntryMode = 'ghost-provider';
+    assert.ok(validateProfileTaskStages(unknownProviderProfile, loadRoutes())
+      .some((message) => message.includes('ghost-provider')));
+    const missingProviderProfile = structuredClone(defaultProfile);
+    delete missingProviderProfile.sourceProviders.pool;
+    assert.ok(validateProfileTaskStages(missingProviderProfile, loadRoutes())
+      .some((message) => message.includes('sourceProviders 绑定：pool')));
+    const unknownRouteProfile = structuredClone(defaultProfile);
+    unknownRouteProfile.taskModel.intentRoutes.analysis = ['ghost-route', 'capture'];
+    assert.ok(validateProfileTaskStages(unknownRouteProfile, loadRoutes())
+      .some((message) => message.includes('未知 Route：ghost-route')));
+    const unknownRouteStageProfile = structuredClone(defaultProfile);
+    unknownRouteStageProfile.taskModel.intentRoutes.review = ['review-only', 'ghost-stage'];
+    assert.ok(validateProfileTaskStages(unknownRouteStageProfile, loadRoutes())
+      .some((message) => message.includes('未知 Stage：review-only/ghost-stage')));
+    const mismatchedEntryProfile = structuredClone(defaultProfile);
+    mismatchedEntryProfile.taskModel.expectedIntentEntries['workflow-maintenance'] = ['pool'];
+    assert.ok(validateProfileTaskStages(mismatchedEntryProfile, loadRoutes())
+      .some((message) => message.includes('入口 pool 未被 Route workflow-maintenance 接受')));
+    const unknownMicroStageProfile = structuredClone(defaultProfile);
+    unknownMicroStageProfile.taskModel.microStages.defect = 'ghost-stage';
+    assert.ok(validateProfileTaskStages(unknownMicroStageProfile, loadRoutes())
+      .some((message) => message.includes('micro-change/ghost-stage')));
     assert.throws(
       () => loadWorkflowProfile('workflow:tests/fixtures/profiles/cycle-a.json'),
       /extends 存在循环/,
@@ -61,6 +86,19 @@ export const main = (): number => {
       () => resolveWorkspaceRelativePath('../outside.json'),
       /不能越出工作区/,
     );
+    const virtualRoot = path.resolve('virtual-workspace');
+    const linkedAncestor = path.join(virtualRoot, 'linked');
+    const linkedTarget = path.join(linkedAncestor, 'tasks');
+    const outsideTarget = path.resolve('virtual-outside');
+    assert.throws(() => assertRealPathWithin(
+      linkedTarget,
+      virtualRoot,
+      'paths.tasksRoot',
+      {
+        existsSync: (candidate) => candidate === linkedAncestor || candidate === virtualRoot,
+        realpathSync: (candidate) => candidate === virtualRoot ? virtualRoot : outsideTarget,
+      },
+    ), /通过链接越出工作区/);
     const unsafeConfig = structuredClone(config);
     unsafeConfig.paths.tasksRoot = '.';
     assert.ok(

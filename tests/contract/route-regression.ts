@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -467,6 +468,30 @@ export const main = () => {
       validateRoutes(invalidStagePathConfig).errors.join('\n'),
       /未知 Stage missing-stage/,
     );
+    const duplicateTaskStageConfig = JSON.parse(JSON.stringify(config));
+    duplicateTaskStageConfig.routes.analysis.stages.report = {
+      docs: ['workflow:resources/cards/report.md'],
+      next: '重复映射',
+      taskStages: ['Analyze'],
+    };
+    assert.match(
+      validateRoutes(duplicateTaskStageConfig).errors.join('\n'),
+      /Analyze 必须映射到唯一运行阶段，实际 2/,
+    );
+    const escapedCardConfig = JSON.parse(JSON.stringify(config));
+    escapedCardConfig.routes.analysis.stages.analyze.docs = [
+      'workflow:resources/cards/../hooks/pre-commit',
+    ];
+    assert.match(
+      validateRoutes(escapedCardConfig).errors.join('\n'),
+      /运行时文档必须位于 cards\//,
+    );
+    const eagerFragmentConfig = JSON.parse(JSON.stringify(config));
+    eagerFragmentConfig.baseDocs.push('workflow:README.md#ai-workflow');
+    assert.match(
+      validateRoutes(eagerFragmentConfig).errors.join('\n'),
+      /禁止把深度参考加入启动链/,
+    );
     const missingSectionConfig = JSON.parse(JSON.stringify(config));
     missingSectionConfig.routes['pool-capture'].references.push(
       'workflow:docs/source-capture.md#missing-section',
@@ -643,6 +668,18 @@ export const main = () => {
       runId: 'run-0123456789abcdef',
       stage: 'implement',
       taskId: 'sample-task',
+    });
+    assert.deepEqual(deriveNextRouteFromModel({
+      currentStage: 'Analyze',
+      entryMode: 'direct',
+      routeId: 'analysis',
+      runId: 'run-abcdef0123456789',
+    }, 'analysis-task', config), {
+      entry: 'direct',
+      route: 'analysis',
+      runId: 'run-abcdef0123456789',
+      stage: 'analyze',
+      taskId: 'analysis-task',
     });
     assert.deepEqual(
       buildNextRouteArguments(nextRoute, ['--materialize']),
@@ -1045,6 +1082,7 @@ export const main = () => {
     assert.throws(() => validateRunLineage({
       createdRunId: false,
       events: parentEvents,
+      initialRouteStage: 'locate-defect',
       initialStage: true,
       route: 'micro-change',
       runId: parentRunId,
@@ -1052,6 +1090,7 @@ export const main = () => {
     assert.doesNotThrow(() => validateRunLineage({
       createdRunId: true,
       events: parentEvents,
+      initialRouteStage: 'locate-defect',
       initialStage: true,
       parentRunId,
       route: 'micro-change',
@@ -1060,6 +1099,7 @@ export const main = () => {
     assert.throws(() => validateRunLineage({
       createdRunId: false,
       events: parentEvents,
+      initialRouteStage: 'locate-defect',
       initialStage: false,
       parentRunId,
       route: 'micro-change',
@@ -1068,6 +1108,7 @@ export const main = () => {
     assert.throws(() => validateRunLineage({
       createdRunId: true,
       events: [],
+      initialRouteStage: 'locate-defect',
       initialStage: true,
       parentRunId,
       route: 'micro-change',
@@ -1080,11 +1121,33 @@ export const main = () => {
         route: 'micro-change',
         runId: parentRunId,
       }],
+      initialRouteStage: 'locate-defect',
       initialStage: true,
       parentRunId,
       route: 'micro-change',
       runId: childRunId,
     }), /只用于切换 Route/);
+    assert.throws(() => validateRunLineage({
+      createdRunId: false,
+      events: [],
+      initialRouteStage: 'capture',
+      initialStage: true,
+      route: 'review-only',
+      runId: childRunId,
+    }), /Run Continuity Gate: .*不存在或没有成功事件/);
+    assert.throws(() => validateRunLineage({
+      createdRunId: false,
+      events: [{
+        result: 'success',
+        route: 'review-only',
+        runId: childRunId,
+        stage: 'review',
+      }],
+      initialRouteStage: 'capture',
+      initialStage: false,
+      route: 'review-only',
+      runId: childRunId,
+    }), /缺少首阶段 review-only\/capture/);
 
     const microRunId = 'run-0123456789abcdef';
     const microBriefPlanHash = '1122334455667788';
@@ -1365,6 +1428,57 @@ export const main = () => {
       }),
       /缺少或未填写最小 Spec 包文件 spec\.md/,
     );
+    const maintenanceTaskRoot = mkdtempSync(
+      path.join(runtimeRoot, 'maintenance-task-'),
+    );
+    const maintenanceTaskId = 'maintenance-entry-regression';
+    const maintenanceTaskDirectory = path.join(maintenanceTaskRoot, maintenanceTaskId);
+    mkdirSync(maintenanceTaskDirectory);
+    const maintenanceManifest = `# Task Manifest
+
+## Identity
+- Schema Version: 1
+- Task ID: ${maintenanceTaskId}
+- Run ID: run-1234567890abcdef
+- Route ID: workflow-maintenance
+- Status: in_progress
+- Current Stage: Inspect
+- State Mode: Conversation
+- Last Updated: 2026-08-24T00:00:00.000Z
+
+## Source Record
+- Entry Mode: not-applicable
+- Type: none
+- SN:
+
+## Stage Status
+| Stage | Status | Artifact / Reason |
+|-------|--------|-------------------|
+| Inspect | in_progress | inspect |
+| Implement | pending | |
+| Review | pending | |
+| Verify | pending | |
+| Git Inspect | pending | |
+
+## Authorization
+- Git Stage: no
+
+## Resume
+- Next Pending Stage: Inspect
+- Next Action: inspect
+`;
+    writeFileSync(
+      path.join(maintenanceTaskDirectory, 'manifest.md'),
+      maintenanceManifest,
+      'utf8',
+    );
+    try {
+      assert.deepEqual(validateTaskArtifactsById(maintenanceTaskId, {
+        root: maintenanceTaskRoot,
+      }), []);
+    } finally {
+      rmSync(maintenanceTaskRoot, { force: true, recursive: true });
+    }
     assert.match(
       validateTaskArtifactsById('../outside-workspace').join('\n'),
       /任务目录名只能包含/,

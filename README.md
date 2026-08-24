@@ -189,7 +189,7 @@ Codex、Qoder 和支持 `AGENTS.md` 的 TRAE 版本直接复用根目录入口�
 | `pool-capture` | `pool` | `capture` → `report` |
 | `micro-change` | `direct`, `pool` | `defect`: `locate-defect` → `implement` → `review-defect` → `verify-defect` → `git-inspect`<br>`requirement`: `locate-requirement` → `implement` → `review-requirement` → `verify-requirement` → `git-inspect` |
 | `standard-change` | `direct`, `pool` | `capture` → `intake` → `prd` → `spec-plan` → `implement` → `review` → `verify` → `git-inspect` |
-| `analysis` | `direct`, `pool` | `capture` → `analyze` → `report` |
+| `analysis` | `direct`, `pool` | `capture` → `analyze` |
 | `review-only` | `direct`, `pool` | `capture` → `review` → `verify` |
 | `workflow-maintenance` | `not-applicable` | `inspect` → `implement` → `review` → `verify` → `git-inspect` |
 | `git-only` | `not-applicable` | `inspect` → `action` → `report` |

@@ -1,9 +1,10 @@
 import {
   existsSync,
   readFileSync,
+  realpathSync,
 } from 'node:fs';
 import path from 'node:path';
-import { workspaceRoot } from '../config/workspace-paths.js';
+import { workflowRoot, workspaceRoot } from '../config/workspace-paths.js';
 import {
   describeProfileBinding,
   loadActiveProfile,
@@ -99,6 +100,20 @@ const splitDocumentSelector = (selector: string) => {
     fragment,
     relativePath,
   };
+};
+
+const selectorFilePath = (selector: string): string => {
+  const { relativePath } = splitDocumentSelector(selector);
+  const resolvedPath = resolveWorkflowLocator(relativePath, '工作流文档');
+  return existsSync(resolvedPath) ? realpathSync(resolvedPath) : resolvedPath;
+};
+
+const isPathInside = (candidatePath: string, rootPath: string): boolean => {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath !== '' &&
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relativePath);
 };
 
 const headingSlug = (value: string): string => value
@@ -235,6 +250,14 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
   const errors: string[] = [];
   const baseDocs = Array.isArray(config.baseDocs) ? config.baseDocs : [];
   const denied = new Set(config.denyEagerDocs || []);
+  const deniedPaths = new Set<string>();
+  denied.forEach((selector) => {
+    try {
+      deniedPaths.add(selectorFilePath(selector));
+    } catch (error: unknown) {
+      errors.push(`denyEagerDocs: ${errorMessage(error)}`);
+    }
+  });
   const riskCatalog = Array.isArray(config.riskCatalog) ? config.riskCatalog : [];
   const riskCatalogSet = new Set(riskCatalog);
   const routeEntries = Object.entries(config.routes || {});
@@ -309,7 +332,7 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
     try {
       readCharacterCount(relativePath);
       knownPaths.add(relativePath);
-      if (eager && denied.has(relativePath)) {
+      if (eager && deniedPaths.has(selectorFilePath(relativePath))) {
         errors.push(`${owner}: 禁止把深度参考加入启动链 ${relativePath}`);
       }
     } catch (error: unknown) {
@@ -453,6 +476,16 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
       if (finalStage && !transitions[finalStage]?.includes('complete')) {
         errors.push(`${routeName}.taskFlow: 最终阶段必须能转换到 complete`);
       }
+      taskStages.forEach((taskStage) => {
+        const owners = stages
+          .filter(([, stage]) => stage.taskStages?.includes(taskStage))
+          .map(([stageName]) => stageName);
+        if (owners.length !== 1) {
+          errors.push(
+            `${routeName}.taskFlow: ${taskStage} 必须映射到唯一运行阶段，实际 ${owners.length}`,
+          );
+        }
+      });
     }
     const taskRequiredStages = route.taskRequiredStages;
     if (taskRequiredStages !== undefined) {
@@ -516,7 +549,16 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
 
       docs.forEach((relativePath) => {
         registerPath(relativePath, `${routeName}/${stageName}`, { eager: true });
-        if (!relativePath.startsWith('workflow:resources/cards/')) {
+        let insideCards = false;
+        try {
+          insideCards = isPathInside(
+            selectorFilePath(relativePath),
+            realpathSync(path.join(workflowRoot, 'resources', 'cards')),
+          );
+        } catch {
+          // registerPath 已记录非法或缺失路径。
+        }
+        if (!insideCards) {
           errors.push(`${routeName}/${stageName}: 运行时文档必须位于 cards/：${relativePath}`);
         }
         if (Number.isInteger(cardLimit)) {

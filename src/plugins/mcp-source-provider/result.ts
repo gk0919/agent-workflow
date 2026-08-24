@@ -23,13 +23,23 @@ interface SanitizationState {
 }
 
 const SIGNED_URL_PARAMETER = /([?&](?:amp;)?(?:access_token|ossaccesskeyid|signature|token|x-amz-credential|x-amz-security-token|x-amz-signature)=)[^&#\s<>"']*/gi;
+const AUTHENTICATION_SCHEME = /\b(bearer|basic)\s+[^\s,;<>}"']+/gi;
+const TEXT_CREDENTIAL = /(\b(?:access[-_]?token|api[-_]?key|authorization|client[-_]?secret|cookie|password|passwd|private[-_]?key|refresh[-_]?token|secret|token)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&}]+)/gi;
+const JSON_WEB_TOKEN = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+const SENSITIVE_KEY = /^(?:access[-_]?token|api[-_]?key|authorization|client[-_]?secret|cookie|password|passwd|private[-_]?key|refresh[-_]?token|secret|token)$/i;
 
 /** 保留上下文，同时让嵌入的签名 URL 无法在日志或产物中继续使用。 */
 const redactSignedUrlParameters = (value: string): string =>
   value.replace(SIGNED_URL_PARAMETER, '$1[redacted]');
 
+const redactSensitiveText = (value: string): string =>
+  redactSignedUrlParameters(value)
+    .replace(AUTHENTICATION_SCHEME, '$1 [redacted]')
+    .replace(TEXT_CREDENTIAL, '$1[redacted]')
+    .replace(JSON_WEB_TOKEN, '[redacted]');
+
 const truncate = (value: string, state: SanitizationState): string => {
-  const redacted = redactSignedUrlParameters(value);
+  const redacted = redactSensitiveText(value);
   const available = Math.max(0, state.remainingTextChars);
   const result = redacted.slice(0, available);
   state.remainingTextChars -= result.length;
@@ -72,7 +82,9 @@ const sanitize = (
   }
   const result: Record<string, PluginJsonValue> = {};
   for (const [key, item] of Object.entries(value).slice(0, 100)) {
-    result[key] = sanitize(item, state, depth + 1);
+    result[key] = SENSITIVE_KEY.test(key)
+      ? '[redacted]'
+      : sanitize(item, state, depth + 1);
   }
   return result;
 };
@@ -107,7 +119,7 @@ export const toSourceCaptureResult = (
 ): SourceCaptureResult => {
   const blocks = textBlocks(result.content);
   if (result.isError) {
-    const detail = redactSignedUrlParameters(blocks.join('\n')).slice(0, 1_000) ||
+    const detail = redactSensitiveText(blocks.join('\n')).slice(0, 1_000) ||
       'MCP 工具返回 isError=true';
     throw new Error(`MCP 工具 ${context.tool} 执行失败：${detail}`);
   }

@@ -1,9 +1,16 @@
 import {
+  closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -52,6 +59,7 @@ const SOURCE_VALUES = new Set([
   'tool-failure',
 ]);
 const MAX_CANDIDATE_CHARS = 12000;
+const STALE_LOCK_MS = 5 * 60 * 1000;
 const REQUIRED_SECTIONS = [
   'Problem Signal',
   'Evidence',
@@ -91,6 +99,115 @@ const approvedPath = (
   knowledgeDirectory = knowledgeRoot,
 ): string =>
   path.join(knowledgeDirectory, 'approved', `${candidateId}.md`);
+
+const lockPath = (
+  candidateId: string,
+  knowledgeDirectory = knowledgeRoot,
+): string =>
+  path.join(knowledgeDirectory, '_locks', `${candidateId}.lock`);
+
+const errorCode = (error: unknown): string =>
+  typeof error === 'object' && error !== null && 'code' in error &&
+    typeof error.code === 'string'
+    ? error.code
+    : '';
+
+const writeTextAtomically = (
+  filePath: string,
+  content: string,
+  { replace = true }: { replace?: boolean } = {},
+): void => {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporaryPath, content, { encoding: 'utf8', flag: 'wx' });
+    if (replace) {
+      renameSync(temporaryPath, filePath);
+    } else {
+      linkSync(temporaryPath, filePath);
+      unlinkSync(temporaryPath);
+    }
+  } finally {
+    if (existsSync(temporaryPath)) {
+      unlinkSync(temporaryPath);
+    }
+  }
+};
+
+const staleOrReleasedLock = (filePath: string): boolean => {
+  try {
+    return Date.now() - statSync(filePath).mtimeMs > STALE_LOCK_MS;
+  } catch (error: unknown) {
+    if (errorCode(error) === 'ENOENT') {
+      return true;
+    }
+    throw error;
+  }
+};
+
+const withCandidateLock = <T>(
+  candidateId: string,
+  knowledgeDirectory: string,
+  action: () => T,
+): T => {
+  const filePath = lockPath(candidateId, knowledgeDirectory);
+  const token = `${process.pid}:${randomUUID()}`;
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  let descriptor: number | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      descriptor = openSync(filePath, 'wx');
+      writeFileSync(descriptor, token, 'utf8');
+      break;
+    } catch (error: unknown) {
+      const acquiredDescriptor = descriptor;
+      const acquiredLock = acquiredDescriptor !== undefined;
+      if (acquiredDescriptor !== undefined) {
+        closeSync(acquiredDescriptor);
+        descriptor = undefined;
+      }
+      if (errorCode(error) !== 'EEXIST') {
+        if (acquiredLock) {
+          try {
+            unlinkSync(filePath);
+          } catch (unlinkError: unknown) {
+            if (errorCode(unlinkError) !== 'ENOENT') {
+              throw unlinkError;
+            }
+          }
+        }
+        throw error;
+      }
+      if (attempt > 0 || !staleOrReleasedLock(filePath)) {
+        throw new Error(`候选正在由另一进程处理：${candidateId}`);
+      }
+      try {
+        unlinkSync(filePath);
+      } catch (unlinkError: unknown) {
+        if (errorCode(unlinkError) !== 'ENOENT') {
+          throw unlinkError;
+        }
+      }
+    }
+  }
+  if (descriptor === undefined) {
+    throw new Error(`无法锁定候选：${candidateId}`);
+  }
+  try {
+    return action();
+  } finally {
+    closeSync(descriptor);
+    try {
+      if (readFileSync(filePath, 'utf8') === token) {
+        unlinkSync(filePath);
+      }
+    } catch (error: unknown) {
+      if (errorCode(error) !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+};
 
 const findSection = (content: string, sectionName: string): string => {
   const headingPattern = new RegExp(`^## ${sectionName}\\r?$`, 'm');
@@ -292,14 +409,15 @@ export const stageCandidate = (
 ): string => {
   const content = buildCandidateContent(options);
   const filePath = candidatePath(options.id, knowledgeDirectory);
-  if (
-    existsSync(filePath) ||
-    existsSync(approvedPath(options.id, knowledgeDirectory))
-  ) {
-    throw new Error(`候选或正式知识已存在：${options.id}`);
-  }
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, content, 'utf8');
+  withCandidateLock(options.id, knowledgeDirectory, () => {
+    if (
+      existsSync(filePath) ||
+      existsSync(approvedPath(options.id, knowledgeDirectory))
+    ) {
+      throw new Error(`候选或正式知识已存在：${options.id}`);
+    }
+    writeTextAtomically(filePath, content, { replace: false });
+  });
   if (!silent) {
     process.stdout.write(
       `经验候选已进入 staging：${path.relative(workspaceRoot, filePath)}\n`,
@@ -351,21 +469,69 @@ const updateMetadata = (
   return updated;
 };
 
-export const promoteCandidate = (
+const promotedResult = (
+  sourcePath: string,
+  targetPath: string,
+): PromotedCandidate => ({ auditPath: sourcePath, targetPath });
+
+const approvedContentFromAudit = (auditContent: string): string =>
+  updateMetadata(auditContent, { status: 'approved' })
+    .replace(/^approved-path:.*(?:\r?\n|$)/m, '');
+
+const promoteCandidateUnlocked = (
   candidateId: string,
-  { knowledgeDirectory = knowledgeRoot, silent = false }: KnowledgeDirectoryOptions = {},
+  knowledgeDirectory: string,
 ): PromotedCandidate => {
-  assertCandidateId(candidateId);
   const sourcePath = candidatePath(candidateId, knowledgeDirectory);
   const targetPath = approvedPath(candidateId, knowledgeDirectory);
   if (!existsSync(sourcePath)) {
     throw new Error(`staging 候选不存在：${candidateId}`);
   }
-  if (existsSync(targetPath)) {
-    throw new Error(`正式知识已存在：${candidateId}`);
-  }
-
   const original = readFileSync(sourcePath, 'utf8');
+  const sourceMetadata = readMetadata(original);
+  if (existsSync(targetPath)) {
+    const targetContent = readFileSync(targetPath, 'utf8');
+    const targetMetadata = readMetadata(targetContent);
+    if (sourceMetadata.status === 'promoted') {
+      const expectedPath = path.relative(workspaceRoot, targetPath).split(path.sep).join('/');
+      if (targetMetadata.status !== 'approved' ||
+          targetMetadata.id !== candidateId ||
+          sourceMetadata.id !== candidateId ||
+          !targetMetadata['promoted-at'] ||
+          sourceMetadata['promoted-at'] !== targetMetadata['promoted-at'] ||
+          sourceMetadata['approved-path'] !== expectedPath ||
+          approvedContentFromAudit(original) !== targetContent) {
+        throw new Error(`候选晋升状态不一致：${candidateId}`);
+      }
+      return promotedResult(sourcePath, targetPath);
+    }
+    const validation = validateCandidateContent(original);
+    if (validation.errors.length > 0) {
+      throw new Error(`候选尚不可恢复晋升：${validation.errors.join('；')}`);
+    }
+    const promotedAt = targetMetadata['promoted-at'] || '';
+    const expectedApproved = promotedAt
+      ? updateMetadata(original, { status: 'approved' }, [`promoted-at: ${promotedAt}`])
+      : '';
+    if (targetMetadata.status !== 'approved' ||
+        targetMetadata.id !== candidateId ||
+        expectedApproved !== targetContent) {
+      throw new Error(`正式知识与 staging 候选不匹配：${candidateId}`);
+    }
+    const auditContent = updateMetadata(
+      original,
+      { status: 'promoted' },
+      [
+        `promoted-at: ${promotedAt}`,
+        `approved-path: ${path.relative(workspaceRoot, targetPath).split(path.sep).join('/')}`,
+      ],
+    );
+    writeTextAtomically(sourcePath, auditContent);
+    return promotedResult(sourcePath, targetPath);
+  }
+  if (sourceMetadata.status === 'promoted') {
+    throw new Error(`正式知识缺失但 staging 已标记 promoted：${candidateId}`);
+  }
   const validation = validateCandidateContent(original);
   if (validation.errors.length > 0) {
     throw new Error(`候选尚不可晋升：${validation.errors.join('；')}`);
@@ -385,18 +551,27 @@ export const promoteCandidate = (
       `approved-path: ${path.relative(workspaceRoot, targetPath).split(path.sep).join('/')}`,
     ],
   );
-  mkdirSync(path.dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, approvedContent, 'utf8');
-  writeFileSync(sourcePath, auditContent, 'utf8');
+  writeTextAtomically(targetPath, approvedContent, { replace: false });
+  writeTextAtomically(sourcePath, auditContent);
+  return promotedResult(sourcePath, targetPath);
+};
+
+export const promoteCandidate = (
+  candidateId: string,
+  { knowledgeDirectory = knowledgeRoot, silent = false }: KnowledgeDirectoryOptions = {},
+): PromotedCandidate => {
+  assertCandidateId(candidateId);
+  const promoted = withCandidateLock(
+    candidateId,
+    knowledgeDirectory,
+    () => promoteCandidateUnlocked(candidateId, knowledgeDirectory),
+  );
   if (!silent) {
     process.stdout.write(
-      `经验候选已由人工门禁晋升：${path.relative(workspaceRoot, targetPath)}\n`,
+      `经验候选已由人工门禁晋升：${path.relative(workspaceRoot, promoted.targetPath)}\n`,
     );
   }
-  return {
-    auditPath: sourcePath,
-    targetPath,
-  };
+  return promoted;
 };
 
 const replaceReviewField = (
@@ -423,30 +598,32 @@ export const approveCandidate = (
   assertOneLine(reviewer, 'reviewer', 120);
   assertOneLine(note, 'note', 500);
   assertCandidateId(candidateId);
-  const sourcePath = candidatePath(candidateId, knowledgeDirectory);
-  const targetPath = approvedPath(candidateId, knowledgeDirectory);
-  if (!existsSync(sourcePath)) {
-    throw new Error(`staging 候选不存在：${candidateId}`);
-  }
-  if (existsSync(targetPath)) {
-    throw new Error(`正式知识已存在：${candidateId}`);
-  }
-
-  const draft = readFileSync(sourcePath, 'utf8');
-  const draftValidation = validateCandidateContent(draft, { requireApproval: false });
-  if (draftValidation.errors.length > 0) {
-    throw new Error(`候选草稿尚不可批准：${draftValidation.errors.join('；')}`);
-  }
-  let approved = replaceReviewField(draft, 'Sensitive Data Review', 'passed');
-  approved = replaceReviewField(approved, 'Decision', 'approved');
-  approved = replaceReviewField(approved, 'Reviewer', reviewer);
-  approved = replaceReviewField(approved, 'Review Note', note);
-  const validation = validateCandidateContent(approved);
-  if (validation.errors.length > 0) {
-    throw new Error(`候选批准后检查失败：${validation.errors.join('；')}`);
-  }
-  writeFileSync(sourcePath, approved, 'utf8');
-  const promoted = promoteCandidate(candidateId, { knowledgeDirectory, silent: true });
+  const promoted = withCandidateLock(candidateId, knowledgeDirectory, () => {
+    const sourcePath = candidatePath(candidateId, knowledgeDirectory);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`staging 候选不存在：${candidateId}`);
+    }
+    const draft = readFileSync(sourcePath, 'utf8');
+    if (readMetadata(draft).status === 'promoted' ||
+        (existsSync(approvedPath(candidateId, knowledgeDirectory)) &&
+          validateCandidateContent(draft).errors.length === 0)) {
+      return promoteCandidateUnlocked(candidateId, knowledgeDirectory);
+    }
+    const draftValidation = validateCandidateContent(draft, { requireApproval: false });
+    if (draftValidation.errors.length > 0) {
+      throw new Error(`候选草稿尚不可批准：${draftValidation.errors.join('；')}`);
+    }
+    let approved = replaceReviewField(draft, 'Sensitive Data Review', 'passed');
+    approved = replaceReviewField(approved, 'Decision', 'approved');
+    approved = replaceReviewField(approved, 'Reviewer', reviewer);
+    approved = replaceReviewField(approved, 'Review Note', note);
+    const validation = validateCandidateContent(approved);
+    if (validation.errors.length > 0) {
+      throw new Error(`候选批准后检查失败：${validation.errors.join('；')}`);
+    }
+    writeTextAtomically(sourcePath, approved);
+    return promoteCandidateUnlocked(candidateId, knowledgeDirectory);
+  });
   if (!silent) {
     process.stdout.write(
       `候选已获当前会话用户确认并晋升：${path.relative(workspaceRoot, promoted.targetPath)}\n`,

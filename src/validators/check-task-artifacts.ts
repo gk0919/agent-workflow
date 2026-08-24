@@ -54,7 +54,7 @@ const KNOWN_STAGES = new Set(taskModel.knownStages);
 const PROVIDER_ENTRY_MODE = taskModel.providerEntryMode;
 const SOURCE_CAPTURE_STAGE = taskModel.sourceCaptureStage;
 const INTAKE_STAGE = taskModel.intakeStage;
-const NONE_VALUES = new Set(['none', '无', 'not applicable', 'n/a']);
+const NONE_VALUES = new Set(['none', '无', 'not applicable', 'not-applicable', 'n/a']);
 const TASK_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const verificationContractPolicy = loadRoutes().verificationContract;
 

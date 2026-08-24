@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {
@@ -62,6 +62,41 @@ const stringMapProperty = (value: UnknownRecord, key: string): Record<string, st
   );
 };
 
+interface RealPathBoundaryFileSystem {
+  existsSync: (filePath: string) => boolean;
+  realpathSync: (filePath: string) => string;
+}
+
+const isInsideOrEqual = (rootPath: string, targetPath: string): boolean => {
+  const relativePath = path.relative(rootPath, targetPath);
+  return relativePath === '' ||
+    (relativePath !== '..' &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relativePath));
+};
+
+/** Rejects existing symlinks or junctions that redirect a logical child outside its root. */
+export const assertRealPathWithin = (
+  targetPath: string,
+  rootPath: string,
+  label = 'path',
+  fileSystem: RealPathBoundaryFileSystem = { existsSync, realpathSync },
+): void => {
+  let existingAncestor = path.resolve(targetPath);
+  while (!fileSystem.existsSync(existingAncestor)) {
+    const parentPath = path.dirname(existingAncestor);
+    if (parentPath === existingAncestor) {
+      throw new Error(`${label} 无法解析现存父目录`);
+    }
+    existingAncestor = parentPath;
+  }
+  const realRoot = fileSystem.realpathSync(path.resolve(rootPath));
+  const realAncestor = fileSystem.realpathSync(existingAncestor);
+  if (!isInsideOrEqual(realRoot, realAncestor)) {
+    throw new Error(`${label} 通过链接越出工作区`);
+  }
+};
+
 /** Resolves a declared path while enforcing the workspace containment boundary. */
 export const resolveWorkspaceRelativePath = (
   relativePath: unknown,
@@ -75,6 +110,7 @@ export const resolveWorkspaceRelativePath = (
   if (resolvedPath !== workspaceRoot && !resolvedPath.startsWith(workspacePrefix)) {
     throw new Error(`${label} 不能越出工作区：${relativePath}`);
   }
+  assertRealPathWithin(resolvedPath, workspaceRoot, label);
   return resolvedPath;
 };
 

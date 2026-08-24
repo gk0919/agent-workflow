@@ -278,6 +278,7 @@ export const main = (): number => {
       approvedCandidate(readFileSync(stagedPath, 'utf8')),
       'utf8',
     );
+    const approvedStagingContent = readFileSync(stagedPath, 'utf8');
     checkCandidate(
       'route-failure-pattern',
       { knowledgeDirectory, silent: true },
@@ -288,6 +289,27 @@ export const main = (): number => {
     );
     assert.match(readFileSync(promoted.targetPath, 'utf8'), /status: approved/);
     assert.match(readFileSync(promoted.auditPath, 'utf8'), /status: promoted/);
+    writeFileSync(promoted.auditPath, approvedStagingContent, 'utf8');
+    const recoveredPromotion = promoteCandidate(
+      'route-failure-pattern',
+      { knowledgeDirectory, silent: true },
+    );
+    assert.equal(recoveredPromotion.targetPath, promoted.targetPath);
+    assert.match(readFileSync(recoveredPromotion.auditPath, 'utf8'), /status: promoted/);
+    assert.doesNotThrow(() => promoteCandidate(
+      'route-failure-pattern',
+      { knowledgeDirectory, silent: true },
+    ));
+    const activeLockPath = path.join(
+      knowledgeDirectory,
+      '_locks',
+      'route-failure-pattern.lock',
+    );
+    writeFileSync(activeLockPath, 'another-process', 'utf8');
+    assert.throws(() => promoteCandidate(
+      'route-failure-pattern',
+      { knowledgeDirectory, silent: true },
+    ), /另一进程处理/);
 
     const approvalStagedPath = stageCandidate({
       createdAt: now,

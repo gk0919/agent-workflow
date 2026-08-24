@@ -368,14 +368,12 @@
           "next": "确认分析问题和证据边界"
         },
         "analyze": {
-          "docs": ["workflow:resources/cards/analyze.md"],
+          "docs": [
+            "workflow:resources/cards/analyze.md",
+            "workflow:resources/cards/report.md"
+          ],
           "taskStages": ["Analyze"],
           "references": ["workflow:docs/analyze.md"],
-          "next": "只读分析并形成证据链"
-        },
-        "report": {
-          "docs": ["workflow:resources/cards/report.md"],
-          "taskStages": ["Analyze"],
           "next": "报告结论、未知项和建议"
         }
       }

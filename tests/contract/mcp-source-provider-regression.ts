@@ -69,11 +69,15 @@ const captureContract = async (): Promise<void> => {
           content: [
             {
               type: 'text',
-              text: '{"screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"待处理","title":"需求标题"}',
+              text: '{"api_key":"exposed-api-key","authorization":"Bearer exposed-bearer","screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"待处理","title":"需求标题"}',
             },
             { type: 'image', data: 'excluded-binary-content' },
           ],
-          structuredContent: { owner: '示例负责人' },
+          structuredContent: {
+            nested: { password: 'exposed-password' },
+            owner: '示例负责人',
+            token: 'exposed-token',
+          },
         };
       }
       return {
@@ -128,12 +132,19 @@ const captureContract = async (): Promise<void> => {
   assert.equal(requirement.sourceId, 'requirement:XQ123456');
   assert.equal(requirement.sourceType, 'test-mcp');
   assert.deepEqual(requirement.facts.result, {
+    api_key: '[redacted]',
+    authorization: '[redacted]',
     screenshot: 'https://files.example.test/a.png?OSSAccessKeyId=[redacted]&Signature=[redacted]',
     status: '待处理',
     title: '需求标题',
   });
   assert.doesNotMatch(JSON.stringify(requirement), /Signature=secret/);
-  assert.deepEqual(requirement.facts.structuredContent, { owner: '示例负责人' });
+  assert.deepEqual(requirement.facts.structuredContent, {
+    nested: { password: '[redacted]' },
+    owner: '示例负责人',
+    token: '[redacted]',
+  });
+  assert.doesNotMatch(JSON.stringify(requirement), /exposed-(?:api-key|bearer|password|token)/);
   assert.doesNotMatch(JSON.stringify(requirement), /excluded-binary-content/);
 
   const defect = await provider.capture({ entry: 'pool', reference: 'BG654321' });
@@ -213,7 +224,10 @@ const failureContract = async (): Promise<void> => {
     connect: async () => ({
       async callTool() {
         return {
-          content: [{ type: 'text', text: '未找到' }],
+          content: [{
+            type: 'text',
+            text: '未找到 Authorization: Bearer exposed-credential authorization=raw-secret api_key=exposed-api-key',
+          }],
           isError: true,
         };
       },
@@ -232,7 +246,12 @@ const failureContract = async (): Promise<void> => {
   });
   await assert.rejects(
     toolFailure.capture({ entry: 'requirement', reference: 'XQ123456' }),
-    /未找到/,
+    (error: Error) => {
+      assert.match(error.message, /未找到/);
+      assert.match(error.message, /\[redacted\]/);
+      assert.doesNotMatch(error.message, /exposed-(?:credential|api-key)|raw-secret/);
+      return true;
+    },
   );
   await toolFailure.close();
 

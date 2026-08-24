@@ -102,6 +102,7 @@ interface RouteLineageEvent {
   result: string;
   route: string;
   runId: string;
+  stage?: string;
 }
 
 const usage = [
@@ -393,6 +394,7 @@ export const validateImplementationApproval = ({
 export const validateRunLineage = ({
   createdRunId,
   events,
+  initialRouteStage,
   initialStage,
   parentRunId = '',
   route,
@@ -400,28 +402,37 @@ export const validateRunLineage = ({
 }: {
   createdRunId: boolean;
   events: RouteLineageEvent[];
+  initialRouteStage: string;
   initialStage: boolean;
   parentRunId?: string;
   route: string;
   runId: string;
 }): void => {
   const successfulEvents = events.filter((event) => event.result === 'success');
-  const runRoutes = new Set(successfulEvents
-    .filter((event) => event.runId === runId)
-    .map((event) => event.route));
+  const runEvents = successfulEvents.filter((event) => event.runId === runId);
+  const runRoutes = new Set(runEvents.map((event) => event.route));
   if (runRoutes.size > 1 || (runRoutes.size === 1 && !runRoutes.has(route))) {
     throw new Error(
       `Run Route Gate: ${runId} 已绑定 ${[...runRoutes].join(', ')}；` +
       '切换 Route 时去掉 --run-id，并用 --parent-run-id 关联原 Run',
     );
   }
-  if (!parentRunId) {
-    return;
-  }
-  if (!initialStage || !createdRunId) {
+  if (parentRunId && (!initialStage || !createdRunId)) {
     throw new Error(
       'Run Route Gate: --parent-run-id 只允许在新 Route 首阶段创建新 Run 时使用',
     );
+  }
+  if (!createdRunId && runEvents.length === 0) {
+    throw new Error(`Run Continuity Gate: ${runId} 不存在或没有成功事件`);
+  }
+  if (!initialStage && !runEvents.some((event) =>
+    event.route === route && event.stage === initialRouteStage)) {
+    throw new Error(
+      `Run Continuity Gate: ${runId} 缺少首阶段 ${route}/${initialRouteStage} 的成功事件`,
+    );
+  }
+  if (!parentRunId) {
+    return;
   }
   if (parentRunId === runId) {
     throw new Error('Run Route Gate: Parent Run 不能与新 Run 相同');
@@ -601,6 +612,8 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
     validateImplementationApproval(options);
     const taskState = guardRouteTask(options);
     const initialStage = isInitialRouteStage(options, classification);
+    const initialRouteStage = classification?.stage ||
+      Object.keys(loadRoutes().routes[options.route]?.stages || {})[0] || '';
     if (!options.runId) {
       if (taskState?.runId) {
         options.runId = taskState.runId;
@@ -617,6 +630,7 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
     validateRunLineage({
       createdRunId,
       events: loaded.events,
+      initialRouteStage,
       initialStage,
       parentRunId: options.parentRunId,
       route: options.route,
