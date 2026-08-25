@@ -185,7 +185,20 @@ const canonicalize = (value: unknown): unknown => {
   return value;
 };
 
-const canonicalJson = (value: unknown): string => JSON.stringify(canonicalize(value));
+export const serializeCanonicalJson = (value: unknown): string =>
+  JSON.stringify(canonicalize(value));
+const canonicalJson = serializeCanonicalJson;
+
+export const hashPortableJson = (
+  value: unknown,
+  maxBytes = MAX_DEFINITION_BYTES,
+): string => {
+  const finding = portableJsonFinding(value, maxBytes);
+  if (finding) {
+    throw new Error(`JSON 值无效：${finding}`);
+  }
+  return createHash('sha256').update(canonicalJson(value)).digest('hex');
+};
 
 const findNonLocalReference = (value: unknown, location = '$'): string | undefined => {
   if (Array.isArray(value)) {
@@ -233,6 +246,26 @@ const validateEmbeddedSchema = (
     findings.push(`${location}: JSON Schema 无效`);
   }
   return findings;
+};
+
+export const validateJsonValue = (
+  schema: PortableJsonSchema,
+  value: unknown,
+  maxBytes = MAX_DEFINITION_BYTES,
+): string[] => {
+  const portableFinding = portableJsonFinding(value, maxBytes);
+  if (portableFinding) {
+    return [`$: ${portableFinding}`];
+  }
+  const schemaFindings = validateEmbeddedSchema(schema, '$schema');
+  if (schemaFindings.length > 0) {
+    return schemaFindings;
+  }
+  const validator = createAjv().compile(schema);
+  if (validator(value)) {
+    return [];
+  }
+  return formatAjvErrors(validator);
 };
 
 const semanticFindings = (definition: WorkflowDefinition): string[] => {

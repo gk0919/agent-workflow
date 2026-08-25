@@ -21,6 +21,16 @@
       "type": "string",
       "pattern": "^event-[a-z0-9]{16,64}$"
     },
+    "eventHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "previousEventHash": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      ]
+    },
     "runId": {
       "type": "string",
       "pattern": "^run-[a-z0-9]{16,64}$"
@@ -51,7 +61,8 @@
         "run.paused",
         "run.resumed",
         "run.cancelled",
-        "run.completed"
+        "run.completed",
+        "run.failed"
       ]
     },
     "nodeId": {

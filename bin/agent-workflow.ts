@@ -27,6 +27,11 @@ const command = (script: string, prefixArguments: string[] = []): CommandTarget 
 const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'cli:test': command('dist/tests/contract/cli-regression.js'),
   'execution:plan': command('dist/src/core/execution-plan.js'),
+  'execution:run': command('dist/src/execution/cli.js', ['run']),
+  'execution:resume': command('dist/src/execution/cli.js', ['resume']),
+  'execution:pause': command('dist/src/execution/cli.js', ['pause']),
+  'execution:cancel': command('dist/src/execution/cli.js', ['cancel']),
+  'execution:runner:test': command('dist/tests/contract/serial-runner-regression.js'),
   'execution:test': command('dist/tests/contract/execution-plan-regression.js'),
   init: command('dist/src/cli/init.js'),
   'init:test': command('dist/tests/contract/init-regression.js'),
@@ -137,9 +142,9 @@ const main = async (): Promise<number> => {
   };
 
   // Init precedes workspace configuration; setup and plugin checks own their lifecycle.
-  // Static planning must not activate plugins or any plugin-provided side effects.
+  // Execution commands own their explicit executor lifecycle and never activate ambient plugins.
   if (commandName === 'init' || commandName === 'setup' || commandName === 'source:capture' ||
-      commandName === 'execution:plan' || commandName.startsWith('plugins:')) {
+      commandName.startsWith('execution:') || commandName.startsWith('plugins:')) {
     return runCommand();
   }
   try {

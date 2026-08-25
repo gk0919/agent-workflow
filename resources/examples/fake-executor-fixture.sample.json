@@ -1,0 +1,51 @@
+{
+  "$schema": "../schemas/fake-executor-fixture.schema.json",
+  "schemaVersion": 1,
+  "executorId": "fake/sample",
+  "capabilities": {
+    "apiVersion": 1,
+    "capabilities": ["structured-output"],
+    "features": {
+      "cancellation": true,
+      "modelRouting": false,
+      "persistentResume": true,
+      "structuredOutput": true,
+      "toolAllowlist": true,
+      "usageReporting": true,
+      "workspaceIsolation": false
+    },
+    "maxConcurrency": 1
+  },
+  "nodes": [
+    {
+      "nodeId": "discover",
+      "attempts": [
+        {
+          "status": "succeeded",
+          "output": {"targets": ["src/contracts/execution.ts"]},
+          "usage": {"durationMs": 10, "inputTokens": 20, "outputTokens": 10, "toolCalls": 0}
+        }
+      ]
+    },
+    {
+      "nodeId": "correctness-review",
+      "attempts": [
+        {
+          "status": "succeeded",
+          "output": {"findings": []},
+          "usage": {"durationMs": 10, "inputTokens": 20, "outputTokens": 10, "toolCalls": 0}
+        }
+      ]
+    },
+    {
+      "nodeId": "security-review",
+      "attempts": [
+        {
+          "status": "succeeded",
+          "output": {"findings": []},
+          "usage": {"durationMs": 10, "inputTokens": 20, "outputTokens": 10, "toolCalls": 0}
+        }
+      ]
+    }
+  ]
+}

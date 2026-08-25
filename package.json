@@ -41,6 +41,7 @@
     "./plugins/mcp-source-provider/config.example.json": "./resources/plugins/mcp-source-provider/config.example.json",
     "./schemas/plugin-manifest.json": "./resources/schemas/plugin-manifest.schema.json",
     "./schemas/execution-event.json": "./resources/schemas/execution-event.schema.json",
+    "./schemas/fake-executor-fixture.json": "./resources/schemas/fake-executor-fixture.schema.json",
     "./schemas/workflow-definition.json": "./resources/schemas/workflow-definition.schema.json",
     "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
     "./package.json": "./package.json"
@@ -59,6 +60,10 @@
     "workflow:classify": "node dist/bin/agent-workflow.js classify",
     "workflow:context": "node dist/bin/agent-workflow.js context",
     "workflow:execution:plan": "node dist/bin/agent-workflow.js execution:plan",
+    "workflow:execution:run": "node dist/bin/agent-workflow.js execution:run",
+    "workflow:execution:resume": "node dist/bin/agent-workflow.js execution:resume",
+    "workflow:execution:pause": "node dist/bin/agent-workflow.js execution:pause",
+    "workflow:execution:cancel": "node dist/bin/agent-workflow.js execution:cancel",
     "workflow:feedback": "node dist/bin/agent-workflow.js feedback",
     "workflow:init": "node dist/bin/agent-workflow.js init",
     "workflow:init:test": "node dist/bin/agent-workflow.js init:test",

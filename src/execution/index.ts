@@ -2,6 +2,7 @@ export {
   AGENT_EXECUTOR_API_VERSION,
   EXECUTION_EVENT_SCHEMA_VERSION,
   EXECUTION_EVENT_TYPES,
+  FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION,
   WORKFLOW_DEFINITION_SCHEMA_VERSION,
   WORKFLOW_NODE_TYPES,
 } from '../contracts/execution.js';
@@ -23,6 +24,17 @@ export type {
   CheckpointWorkflowNode,
   ExecutionEvent,
   ExecutionEventType,
+  ExecutionArtifactReference,
+  ExecutionControlResult,
+  ExecutionJournalStore,
+  ExecutionRunError,
+  ExecutionRunErrorCode,
+  ExecutionRunNodeSummary,
+  ExecutionRunResult,
+  ExecutionRunStatus,
+  FakeExecutorAttemptFixture,
+  FakeExecutorFixture,
+  FakeExecutorNodeFixture,
   GateWorkflowNode,
   JoinWorkflowNode,
   PortableJsonSchema,
@@ -39,6 +51,24 @@ export type {
 } from '../contracts/execution.js';
 export {
   compileStaticExecutionPlan,
+  hashPortableJson,
+  serializeCanonicalJson,
   validateExecutionEvent,
+  validateJsonValue,
   validateWorkflowDefinition,
 } from '../core/execution-plan.js';
+export {
+  FakeAgentExecutor,
+  validateFakeExecutorFixture,
+} from './fake-executor.js';
+export {
+  calculateExecutionEventHash,
+  FileExecutionJournalStore,
+} from './file-journal.js';
+export type { FileExecutionJournalOptions } from './file-journal.js';
+export {
+  cancelSerialWorkflow,
+  pauseSerialWorkflow,
+  runSerialWorkflow,
+} from './serial-runner.js';
+export type { SerialExecutionOptions } from './serial-runner.js';

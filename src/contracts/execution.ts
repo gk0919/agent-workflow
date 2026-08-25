@@ -8,6 +8,7 @@ import type { PluginPermission } from './plugin.js';
 export const WORKFLOW_DEFINITION_SCHEMA_VERSION = 1 as const;
 export const EXECUTION_EVENT_SCHEMA_VERSION = 1 as const;
 export const AGENT_EXECUTOR_API_VERSION = 1 as const;
+export const FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION = 1 as const;
 
 export const WORKFLOW_NODE_TYPES = [
   'agent',
@@ -31,6 +32,7 @@ export const EXECUTION_EVENT_TYPES = [
   'run.resumed',
   'run.cancelled',
   'run.completed',
+  'run.failed',
 ] as const;
 export type ExecutionEventType = typeof EXECUTION_EVENT_TYPES[number];
 
@@ -108,9 +110,11 @@ export interface WorkflowDefinition {
 
 export interface ExecutionEvent {
   readonly attempt?: number;
+  readonly eventHash?: string;
   readonly eventId: string;
   readonly nodeId?: string;
   readonly payload: Readonly<PluginJsonObject>;
+  readonly previousEventHash?: string | null;
   readonly runId: string;
   readonly schemaVersion: typeof EXECUTION_EVENT_SCHEMA_VERSION;
   readonly sequence: number;
@@ -132,6 +136,7 @@ export interface AgentExecutorFeatures {
 
 export interface AgentExecutorCapabilities {
   readonly apiVersion: typeof AGENT_EXECUTOR_API_VERSION;
+  readonly capabilities?: readonly string[];
   readonly features: AgentExecutorFeatures;
   readonly maxConcurrency: number;
   readonly models?: readonly string[];
@@ -243,4 +248,88 @@ export interface StaticExecutionPlan {
   readonly schemaVersion: 1;
   readonly workflowHash: string;
   readonly workflowId: string;
+}
+
+export interface ExecutionArtifactReference {
+  readonly byteLength: number;
+  readonly id: string;
+  readonly mediaType: 'application/json';
+  readonly sha256: string;
+}
+
+export type ExecutionRunStatus = 'cancelled' | 'completed' | 'failed' | 'paused';
+
+export type ExecutionRunErrorCode =
+  | 'budget-exhausted'
+  | 'checkpoint-required'
+  | 'definition-mismatch'
+  | 'executor-blocked'
+  | 'executor-incompatible'
+  | 'input-invalid'
+  | 'journal-corrupt'
+  | 'node-failed'
+  | 'paused';
+
+export interface ExecutionRunError {
+  readonly code: ExecutionRunErrorCode;
+  readonly message: string;
+  readonly nodeId?: string;
+}
+
+export interface ExecutionRunNodeSummary {
+  readonly artifact?: ExecutionArtifactReference;
+  readonly attempts: number;
+  readonly id: string;
+  readonly status: 'completed' | 'failed' | 'pending';
+  readonly type: WorkflowNodeType;
+}
+
+export interface ExecutionRunResult {
+  readonly error?: ExecutionRunError;
+  readonly eventCount: number;
+  readonly nodes: readonly ExecutionRunNodeSummary[];
+  readonly result?: PluginJsonValue;
+  readonly resultArtifact?: ExecutionArtifactReference;
+  readonly runId: string;
+  readonly status: ExecutionRunStatus;
+  readonly workflowHash: string;
+  readonly workflowId: string;
+}
+
+export interface ExecutionControlResult {
+  readonly eventCount: number;
+  readonly runId: string;
+  readonly status: 'cancelled' | 'completed' | 'failed' | 'paused';
+}
+
+/** Append-only event and content-addressed JSON persistence used by the serial kernel. */
+export interface ExecutionJournalStore {
+  readonly runId: string;
+  append(event: ExecutionEvent): void;
+  readEvents(): readonly ExecutionEvent[];
+  readJsonArtifact(reference: ExecutionArtifactReference): PluginJsonValue;
+  writeJsonArtifact(value: PluginJsonValue): ExecutionArtifactReference;
+}
+
+export interface FakeExecutorAttemptFixture {
+  readonly artifacts?: readonly string[];
+  readonly error?: AgentExecutionError;
+  readonly findings?: readonly ValidationFinding[];
+  readonly output?: PluginJsonValue;
+  readonly retryable?: boolean;
+  readonly status: AgentExecutionStatus;
+  readonly usage?: Partial<AgentExecutionUsage>;
+}
+
+export interface FakeExecutorNodeFixture {
+  readonly attempts: readonly FakeExecutorAttemptFixture[];
+  readonly nodeId: string;
+}
+
+export interface FakeExecutorFixture {
+  readonly $schema?: string;
+  readonly capabilities: AgentExecutorCapabilities;
+  readonly executorId: string;
+  readonly nodes: readonly FakeExecutorNodeFixture[];
+  readonly schemaVersion: typeof FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION;
 }

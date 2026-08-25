@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Phase 0 已实现；Phase 1 及以后仍为 Proposed |
+| 状态 | Phase 0、Phase 1 已实现；Phase 2 及以后仍为 Proposed |
 | 最近评审 | 2026-08-25 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
@@ -44,21 +44,22 @@
 ## 当前基础与缺口
 
 现有系统已经具备多 Agent 内核的控制面基础。Phase 0 已增加公共执行契约与静态编译器，
-但尚无通用 Runner 或真实 Executor 实现。
+Phase 1 已增加确定性串行 Runner、File Journal、内容寻址 Artifact 和 Fake Executor；
+真实 Executor 与并行调度仍未实现。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
 | Route / Profile | 选择路径、阶段和策略 | 阶段内部 Execution Graph |
 | Route Packet | 构造受预算控制的上下文 | 节点级 Context Snapshot 与引用 |
-| Task Lifecycle | `pending`、`blocked`、`resume`、`complete` | Run、Node、Attempt 级状态 |
+| Task Lifecycle | `pending`、`blocked`、`resume`、`complete`；Execution Run 已有 Run、Node、Attempt 事件 | Task Stage 与 Execution Run 的自动绑定 |
 | Plugin Runtime | 服务注册、依赖、权限和回滚；已注册 Agent Executor 标准服务 ID | Executor 实现与 capability negotiation |
 | Validator Service | 领域校验扩展点；已实现 Workflow/Event Ajv 结构校验和 DAG 语义校验 | 运行输入、节点输出和持久化状态校验 |
 | Approval Provider | 人工决策入口 | Run/Node Checkpoint 绑定与重放保护 |
-| Artifact Store | 保存内容与元数据 | 节点输出、检查点和内容寻址约定 |
+| Artifact Store | 保存内容与元数据；Phase 1 File Store 使用 SHA-256 内容寻址 JSON | 可替换 Artifact Store 与跨宿主引用 |
 | Reporter | 外部报告扩展点 | 标准执行事件和使用量事件 |
 | Worktree | 任务与仓库隔离 | Run/Node/Lane 级资源租约 |
 | Verification Contract | 目标、改动和验证追踪 | 节点结果到验证证据的绑定 |
-| Runtime Feedback | 匿名化聚合 | 可恢复但不进入聚合日志的 Execution Journal |
+| Runtime Feedback | 匿名化聚合；Execution Journal 已独立保存在 ignored runtime | Journal retention、导出与远程实现 |
 
 现有 `AgentAdapterService` 只负责指令适配，不承担模型调用。执行能力必须使用新的独立契约，避免一个服务同时负责提示转换、调度和副作用。
 
@@ -408,7 +409,7 @@ Reporter 应能观察：
 
 上述退出标准已满足；Fake Executor 的可执行 conformance fixture 随 Phase 1 Runner 落地。
 
-### Phase 1：确定性串行 Runner
+### Phase 1：确定性串行 Runner（已完成）
 
 交付：
 
@@ -420,6 +421,26 @@ Reporter 应能观察：
 - 硬预算和错误分类
 
 退出标准：进程退出后可从 Journal 恢复，已完成只读节点不重复执行，Workflow 变化不会复用旧结果。
+
+当前实现（2026-08-25）：
+
+- `runSerialWorkflow` 按静态计划逐节点执行 `agent`、`join`、`gate` 和
+  `checkpoint`，Phase 1 强制 `maxExternalWrites: 0`、共享只读 Workspace 和只读权限。
+- `FileExecutionJournalStore` 将事件保存为 sequence-only 不可变文件并使用
+  `previousEventHash`/ `eventHash` 形成 SHA-256 hash 链；节点输出保存为内容寻址 JSON
+  Artifact。Journal 和 Artifact 位于 `.agent-workflow/runtime/executions/`，不进入版本控制。
+- Run 创建时绑定 Workflow hash、Input hash 和 Input Artifact。Resume 会重放事件，只复用
+  Artifact 完整的 `node.completed`；定义或输入变化会在调用 Executor 前被拒绝。
+- Agent Result 先经过可移植 JSON、身份、使用量和节点 output Schema 校验；无效输出可以在
+  `maxAttemptsPerNode` 内重试，超时、工具调用、尝试次数和总持续时间由代码执行硬限制。
+- Fake Executor 使用显式、版本化 Fixture 按 `nodeId + attempt` 返回结果，不解析 prompt；
+  conformance regression 覆盖重试、恶意返回、恢复和终态不重复调用。
+- `execution:run`、`execution:resume`、`execution:pause`、`execution:cancel` 提供
+  Phase 1 CLI；Checkpoint approval 通过 resume 的 `--approve <node-id>` 显式提供。
+- Pause/Cancel 是 Journal 级协作控制，不承诺跨进程强制中断正在运行的第三方 Executor；
+  真实宿主取消由后续 Executor Adapter 负责。
+
+上述退出标准已满足；Phase 2 才开放 `map`、`parallel`、`reduce` 和有界并发。
 
 ### Phase 2：只读并行
 

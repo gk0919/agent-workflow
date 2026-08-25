@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/fake-executor-fixture.schema.json",
+  "title": "Deterministic Fake Agent Executor Fixture",
+  "type": "object",
+  "required": ["schemaVersion", "executorId", "capabilities", "nodes"],
+  "properties": {
+    "$schema": {"type": "string", "maxLength": 500},
+    "schemaVersion": {"const": 1},
+    "executorId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:[./:-][a-z0-9]+)*$"
+    },
+    "capabilities": {"$ref": "#/$defs/capabilities"},
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {"$ref": "#/$defs/node"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "capabilities": {
+      "type": "object",
+      "required": ["apiVersion", "features", "maxConcurrency"],
+      "properties": {
+        "apiVersion": {"const": 1},
+        "capabilities": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[a-z0-9]+(?:[.:/-][a-z0-9]+)*$"
+          }
+        },
+        "features": {
+          "type": "object",
+          "required": [
+            "cancellation",
+            "modelRouting",
+            "persistentResume",
+            "structuredOutput",
+            "toolAllowlist",
+            "usageReporting",
+            "workspaceIsolation"
+          ],
+          "properties": {
+            "cancellation": {"type": "boolean"},
+            "modelRouting": {"type": "boolean"},
+            "persistentResume": {"type": "boolean"},
+            "structuredOutput": {"type": "boolean"},
+            "toolAllowlist": {"type": "boolean"},
+            "usageReporting": {"type": "boolean"},
+            "workspaceIsolation": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
+        "maxConcurrency": {"type": "integer", "minimum": 1, "maximum": 64},
+        "models": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 120}
+        }
+      },
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "required": ["nodeId", "attempts"],
+      "properties": {
+        "nodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "attempts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {"$ref": "#/$defs/attempt"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "attempt": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["blocked", "cancelled", "failed", "succeeded"]},
+        "output": true,
+        "retryable": {"type": "boolean"},
+        "artifacts": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "enum": [
+                "executor-unavailable",
+                "invalid-output",
+                "permission-denied",
+                "timeout",
+                "tool-failure",
+                "workspace-conflict",
+                "unknown"
+              ]
+            },
+            "message": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "details": {"type": "object", "maxProperties": 100}
+          },
+          "additionalProperties": false
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": ["code", "message", "severity"],
+            "properties": {
+              "code": {"type": "string", "minLength": 1, "maxLength": 120},
+              "message": {"type": "string", "minLength": 1, "maxLength": 1000},
+              "path": {"type": "string", "minLength": 1, "maxLength": 500},
+              "severity": {"enum": ["error", "info", "warning"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "durationMs": {"type": "integer", "minimum": 0, "maximum": 86400000},
+            "inputTokens": {
+              "oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]
+            },
+            "outputTokens": {
+              "oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]
+            },
+            "toolCalls": {
+              "oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
