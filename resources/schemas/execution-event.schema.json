@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-workflow.local/schemas/execution-event.schema.json",
   "title": "Multi-Agent Execution Journal Event",
-  "description": "Versioned append-only event envelope reserved for the execution kernel.",
+  "description": "Versioned append-only event envelope for serial and read-only parallel execution.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -71,6 +71,12 @@
       "maxLength": 120,
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
+    "laneId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
     "attempt": {"type": "integer", "minimum": 1, "maximum": 10},
     "payload": {
       "type": "object",
@@ -99,14 +105,16 @@
         "required": ["nodeId", "attempt"],
         "properties": {
           "nodeId": true,
-          "attempt": true
+          "attempt": true,
+          "laneId": true
         }
       },
       "else": {
         "type": "object",
         "properties": {
           "nodeId": false,
-          "attempt": false
+          "attempt": false,
+          "laneId": false
         }
       }
     }

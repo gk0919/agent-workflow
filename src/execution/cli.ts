@@ -18,6 +18,7 @@ import { FileExecutionJournalStore } from './file-journal.js';
 import {
   cancelSerialWorkflow,
   pauseSerialWorkflow,
+  runParallelWorkflow,
   runSerialWorkflow,
 } from './serial-runner.js';
 
@@ -81,8 +82,10 @@ const resolveExecutionsRoot = (
 const printUsage = (): void => {
   process.stdout.write([
     'Usage:',
-    '  agent-workflow execution:run --file <workflow.json> --fixture <fake.json> [--input <input.json>] [--run-id <id>] [--format text|json]',
-    '  agent-workflow execution:resume --file <workflow.json> --fixture <fake.json> --run-id <id> [--input <input.json>] [--approve <node-id>] [--format text|json]',
+    '  agent-workflow execution:run --file <workflow.json> --fixture <fake.json> [--scheduler serial|parallel] [--input <input.json>] [--run-id <id>] [--format text|json]',
+    '  agent-workflow execution:resume --file <workflow.json> --fixture <fake.json> --run-id <id> [--scheduler serial|parallel] [--input <input.json>] [--approve <node-id>] [--format text|json]',
+    '  agent-workflow execution:parallel:run --file <workflow.json> --fixture <fake.json> [--input <input.json>] [--run-id <id>] [--format text|json]',
+    '  agent-workflow execution:parallel:resume --file <workflow.json> --fixture <fake.json> --run-id <id> [--input <input.json>] [--approve <node-id>] [--format text|json]',
     '  agent-workflow execution:pause --run-id <id> [--format text|json]',
     '  agent-workflow execution:cancel --run-id <id> [--format text|json]',
     '',
@@ -126,6 +129,7 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
         help: { type: 'boolean', short: 'h' },
         input: { type: 'string' },
         'run-id': { type: 'string' },
+        scheduler: { type: 'string', default: 'serial' },
       },
       strict: true,
     });
@@ -142,6 +146,9 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
     }
     if (parsed.values.format !== 'text' && parsed.values.format !== 'json') {
       throw new Error('--format 仅支持 text 或 json');
+    }
+    if (parsed.values.scheduler !== 'serial' && parsed.values.scheduler !== 'parallel') {
+      throw new Error('--scheduler 仅支持 serial 或 parallel');
     }
     const { workflowProjectRoot, workspaceRoot } = await import('../config/workspace-paths.js');
     const executionsRoot = resolveExecutionsRoot(workspaceRoot, workflowProjectRoot);
@@ -175,7 +182,10 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
     const store = new FileExecutionJournalStore(executionsRoot, runId, {
       create: action === 'run',
     });
-    const result = await runSerialWorkflow({
+    const runWorkflow = parsed.values.scheduler === 'parallel'
+      ? runParallelWorkflow
+      : runSerialWorkflow;
+    const result = await runWorkflow({
       approvedCheckpoints: parsed.values.approve ?? [],
       definition,
       executor,

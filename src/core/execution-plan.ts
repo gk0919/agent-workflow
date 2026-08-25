@@ -287,9 +287,14 @@ const semanticFindings = (definition: WorkflowDefinition): string[] => {
   if (definition.limits.maxConcurrency > definition.limits.maxAgents) {
     findings.push('$.limits.maxConcurrency: 不得超过 maxAgents');
   }
-  const agentCount = definition.nodes.filter((node) => node.type === 'agent').length;
-  if (agentCount > definition.limits.maxAgents) {
-    findings.push(`$.limits.maxAgents: ${agentCount} 个 Agent 节点超过上限`);
+  const agentUpperBound = definition.nodes.reduce((total, node) => {
+    if (node.type === 'agent') {
+      return total + 1;
+    }
+    return node.type === 'map' ? total + node.maxItems : total;
+  }, 0);
+  if (agentUpperBound > definition.limits.maxAgents) {
+    findings.push(`$.limits.maxAgents: Agent 节点超过上限（调用上界 ${agentUpperBound}）`);
   }
 
   const dependents = new Map<string, Set<string>>(
@@ -306,7 +311,7 @@ const semanticFindings = (definition: WorkflowDefinition): string[] => {
       }
     }
 
-    if (node.type === 'agent') {
+    if (node.type === 'agent' || node.type === 'map') {
       const required = new Set(node.requiredCapabilities ?? []);
       const overlap = (node.preferredCapabilities ?? [])
         .filter((capability) => required.has(capability))
@@ -318,6 +323,29 @@ const semanticFindings = (definition: WorkflowDefinition): string[] => {
       }
       if (node.outputSchema !== undefined) {
         findings.push(...validateEmbeddedSchema(node.outputSchema, `$.nodes/${node.id}/outputSchema`));
+      }
+    }
+    if (node.type === 'parallel') {
+      const minSuccess = node.minSuccess ?? node.dependsOn.length;
+      if (minSuccess > node.dependsOn.length) {
+        findings.push(`$.nodes/${node.id}/minSuccess: 不得超过依赖数量`);
+      }
+      if (
+        node.mode === 'adversarial' &&
+        (node.dependsOn.length < 2 || minSuccess < 2)
+      ) {
+        findings.push(`$.nodes/${node.id}: adversarial 模式至少需要两个分支成功`);
+      }
+      const nonAgentBranches = node.mode === 'adversarial'
+        ? node.dependsOn.filter((id) => {
+          const dependency = nodesById.get(id);
+          return dependency && dependency.type !== 'agent' && dependency.type !== 'map';
+        })
+        : [];
+      if (nonAgentBranches.length > 0) {
+        findings.push(
+          `$.nodes/${node.id}: adversarial 分支必须是 agent 或 map：${nonAgentBranches.join(', ')}`,
+        );
       }
     }
   }

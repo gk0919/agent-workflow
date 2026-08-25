@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Phase 0、Phase 1 已实现；Phase 2 及以后仍为 Proposed |
+| 状态 | Phase 0、Phase 1、Phase 2 已实现；Phase 3 及以后仍为 Proposed |
 | 最近评审 | 2026-08-25 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
@@ -22,7 +22,7 @@
 3. 新增可选 Execution Kernel，负责调度、并发、检查点、恢复、取消和预算。
 4. 通过公共 Agent Executor 契约接入不同宿主或模型，不在 Core 中绑定具体产品。
 5. 所有不可信 Workflow、输入、Agent 输出和持久化事件先做结构校验，再做语义与安全校验。
-6. 首版只支持串行、只读和可恢复执行；并行写入、动态生成和脚本外观按阶段开放。
+6. Phase 1 基线只支持串行、只读和可恢复执行；Phase 2 已开放有界只读并行，写入并行和脚本外观仍按后续阶段开放。
 
 不采用的目标方案是：直接在主 Node 进程中加载或执行模型生成的任意 JavaScript。若未来提供 TypeScript/JavaScript 作者体验，它只能生成声明式 IR，不能成为受信任执行边界。
 
@@ -45,7 +45,8 @@
 
 现有系统已经具备多 Agent 内核的控制面基础。Phase 0 已增加公共执行契约与静态编译器，
 Phase 1 已增加确定性串行 Runner、File Journal、内容寻址 Artifact 和 Fake Executor；
-真实 Executor 与并行调度仍未实现。
+Phase 2 已增加稳定批次的只读并行调度、动态 map lane、失败隔离和确定性归约。
+真实 Executor 与宿主 Adapter 仍未实现。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
@@ -433,16 +434,16 @@ Reporter 应能观察：
   Artifact 完整的 `node.completed`；定义或输入变化会在调用 Executor 前被拒绝。
 - Agent Result 先经过可移植 JSON、身份、使用量和节点 output Schema 校验；无效输出可以在
   `maxAttemptsPerNode` 内重试，超时、工具调用、尝试次数和总持续时间由代码执行硬限制。
-- Fake Executor 使用显式、版本化 Fixture 按 `nodeId + attempt` 返回结果，不解析 prompt；
+- Fake Executor 使用显式、版本化 Fixture 按 `nodeId + laneId + attempt` 返回结果，不解析 prompt；
   conformance regression 覆盖重试、恶意返回、恢复和终态不重复调用。
 - `execution:run`、`execution:resume`、`execution:pause`、`execution:cancel` 提供
   Phase 1 CLI；Checkpoint approval 通过 resume 的 `--approve <node-id>` 显式提供。
 - Pause/Cancel 是 Journal 级协作控制，不承诺跨进程强制中断正在运行的第三方 Executor；
   真实宿主取消由后续 Executor Adapter 负责。
 
-上述退出标准已满足；Phase 2 才开放 `map`、`parallel`、`reduce` 和有界并发。
+上述退出标准已满足；Phase 1 入口继续显式拒绝 `map`、`parallel`、`reduce`，避免旧入口静默改变语义。
 
-### Phase 2：只读并行
+### Phase 2：只读并行（已完成）
 
 交付：
 
@@ -453,6 +454,30 @@ Reporter 应能观察：
 - Agent/Node 使用量统计
 
 退出标准：相同输入和 Fake Executor 下调度结果可复现；并发不突破硬上限；取消后状态可恢复。
+
+当前实现（2026-08-25）：
+
+- `runParallelWorkflow` 按静态 DAG layer 选择就绪节点，将 Agent 和 Map lane 放入稳定排序的
+  wave；有效并发为 Workflow `maxConcurrency` 与 Executor `maxConcurrency` 的较小值。
+  调用可以真实并发完成，但结果、重试和 Journal 事件始终按稳定 task/lane 顺序提交。
+- `map` 只接受一个已完成依赖，通过受限 JSON Pointer 读取数组，并以 `maxItems` 建立静态
+  Agent 上界；lane ID 由数组索引稳定生成，item 作为内容寻址 Artifact 传递。恢复时只复用
+  已有且 Artifact 完整的 lane，未确认完成的在途 lane 使用下一 attempt。
+- `parallel` 汇总固定依赖分支；失败节点只有显式声明 `failurePolicy: isolate` 才允许继续，
+  `minSuccess` 决定整体阈值。`adversarial` 模式静态要求至少两个 Agent/Map 分支成功，但
+  Phase 2 不声称验证模型、提示或宿主之间的真实独立性。
+- `reduce` 使用受限 JSON Pointer 选择输入，并提供 `collect` 与基于 canonical JSON 的
+  精确 `dedupe`；不执行任意表达式、脚本或模型生成代码。
+- Agent/Node/Run 使用量从 Journal 中重放聚合，包含调用数、失败数、持续时间、token、
+  tool call 和观察到的最大并发；Executor 报告 unknown 时汇总保持 `null`。
+- 在途 wave 会轮询 Journal 的 pause/cancel 状态并触发 Executor best-effort cancellation；
+  已持久化取消保持终态可重放，暂停恢复不会复用未完成 attempt。
+- `execution:parallel:run`、`execution:parallel:resume` 和 `--scheduler parallel` 提供
+  显式 CLI；Fixture 支持 `laneId` 和确定性 `delayMs` 并发测试。
+- conformance regression 覆盖完成顺序反转时事件序列一致、并发上限、Map lane 部分失败、
+  deterministic dedupe、对抗汇总、进程中断恢复、超时取消、运行中外部取消、使用量和 CLI。
+
+上述退出标准已满足；Phase 3 才接入真实宿主 Executor，并验证跨宿主可移植性。
 
 首个真实试点应选择只读、结果可独立验证的工作流，例如：
 

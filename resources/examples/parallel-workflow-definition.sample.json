@@ -1,0 +1,61 @@
+{
+  "$schema": "../schemas/workflow-definition.schema.json",
+  "schemaVersion": 1,
+  "id": "readonly-parallel-review",
+  "description": "Generic Phase 2 sample with bounded map, deterministic dedupe and adversarial verification.",
+  "limits": {
+    "maxAgents": 5,
+    "maxAttemptsPerNode": 2,
+    "maxConcurrency": 2,
+    "maxDurationMs": 60000,
+    "maxExternalWrites": 0,
+    "maxIterations": 1
+  },
+  "nodes": [
+    {
+      "id": "discover",
+      "type": "agent",
+      "prompt": "Return a bounded items array.",
+      "workspace": {"mode": "shared-readonly"}
+    },
+    {
+      "id": "review-items",
+      "type": "map",
+      "dependsOn": ["discover"],
+      "itemsPointer": "/items",
+      "maxItems": 2,
+      "prompt": "Review one item and return a structured finding.",
+      "failurePolicy": "isolate",
+      "workspace": {"mode": "shared-readonly"}
+    },
+    {
+      "id": "dedupe-findings",
+      "type": "reduce",
+      "dependsOn": ["review-items"],
+      "itemsPointer": "/items",
+      "strategy": "dedupe"
+    },
+    {
+      "id": "verify-a",
+      "type": "agent",
+      "dependsOn": ["dedupe-findings"],
+      "prompt": "Verify the findings independently from perspective A.",
+      "workspace": {"mode": "shared-readonly"}
+    },
+    {
+      "id": "verify-b",
+      "type": "agent",
+      "dependsOn": ["dedupe-findings"],
+      "prompt": "Verify the findings independently from perspective B.",
+      "workspace": {"mode": "shared-readonly"}
+    },
+    {
+      "id": "result",
+      "type": "parallel",
+      "dependsOn": ["verify-a", "verify-b"],
+      "mode": "adversarial",
+      "minSuccess": 2
+    }
+  ],
+  "resultNode": "result"
+}

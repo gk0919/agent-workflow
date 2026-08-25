@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-workflow.local/schemas/workflow-definition.schema.json",
   "title": "Portable Multi-Agent Workflow Definition",
-  "description": "Phase 0 declarative workflow graph. This contract plans work but does not execute agents.",
+  "description": "Portable declarative workflow graph for deterministic serial and read-only parallel execution.",
   "type": "object",
   "required": ["schemaVersion", "id", "limits", "nodes", "resultNode"],
   "properties": {
@@ -21,7 +21,10 @@
           {"$ref": "#/$defs/agentNode"},
           {"$ref": "#/$defs/checkpointNode"},
           {"$ref": "#/$defs/gateNode"},
-          {"$ref": "#/$defs/joinNode"}
+          {"$ref": "#/$defs/joinNode"},
+          {"$ref": "#/$defs/mapNode"},
+          {"$ref": "#/$defs/parallelNode"},
+          {"$ref": "#/$defs/reduceNode"}
         ]
       }
     },
@@ -46,6 +49,11 @@
         {"type": "boolean"},
         {"type": "object"}
       ]
+    },
+    "jsonPointer": {
+      "type": "string",
+      "maxLength": 500,
+      "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
     },
     "dependencyList": {
       "type": "array",
@@ -101,7 +109,7 @@
       "required": ["id", "type"],
       "properties": {
         "id": {"$ref": "#/$defs/identifier"},
-        "type": {"enum": ["agent", "checkpoint", "gate", "join"]},
+        "type": {"enum": ["agent", "checkpoint", "gate", "join", "map", "parallel", "reduce"]},
         "label": {"type": "string", "minLength": 1, "maxLength": 200},
         "dependsOn": {"$ref": "#/$defs/dependencyList"}
       }
@@ -124,6 +132,7 @@
           "required": ["prompt"],
           "properties": {
             "type": {"const": "agent"},
+            "failurePolicy": {"enum": ["fail-fast", "isolate"]},
             "prompt": {"type": "string", "minLength": 1, "maxLength": 20000},
             "outputSchema": {"$ref": "#/$defs/schemaValue"},
             "permissions": {"$ref": "#/$defs/permissionList"},
@@ -182,11 +191,76 @@
       ],
       "unevaluatedProperties": false
     },
+    "mapNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["dependsOn", "maxItems", "prompt"],
+          "properties": {
+            "type": {"const": "map"},
+            "dependsOn": {"$ref": "#/$defs/singleDependencyList"},
+            "failurePolicy": {"enum": ["fail-fast", "isolate"]},
+            "itemsPointer": {"$ref": "#/$defs/jsonPointer"},
+            "maxItems": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "prompt": {"type": "string", "minLength": 1, "maxLength": 20000},
+            "outputSchema": {"$ref": "#/$defs/schemaValue"},
+            "permissions": {"$ref": "#/$defs/permissionList"},
+            "requiredCapabilities": {"$ref": "#/$defs/capabilityList"},
+            "preferredCapabilities": {"$ref": "#/$defs/capabilityList"},
+            "workspace": {"$ref": "#/$defs/workspace"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "parallelNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["dependsOn", "mode"],
+          "properties": {
+            "type": {"const": "parallel"},
+            "dependsOn": {"$ref": "#/$defs/nonEmptyDependencyList"},
+            "mode": {"enum": ["adversarial", "independent"]},
+            "minSuccess": {"type": "integer", "minimum": 0, "maximum": 200}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "reduceNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["dependsOn", "strategy"],
+          "properties": {
+            "type": {"const": "reduce"},
+            "dependsOn": {"$ref": "#/$defs/nonEmptyDependencyList"},
+            "itemsPointer": {"$ref": "#/$defs/jsonPointer"},
+            "strategy": {"enum": ["collect", "dedupe"]}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "nonEmptyDependencyList": {
       "type": "array",
       "allOf": [
         {"$ref": "#/$defs/dependencyList"},
         {"type": "array", "minItems": 1}
+      ]
+    },
+    "singleDependencyList": {
+      "type": "array",
+      "allOf": [
+        {"$ref": "#/$defs/dependencyList"},
+        {"type": "array", "minItems": 1, "maxItems": 1}
       ]
     }
   }

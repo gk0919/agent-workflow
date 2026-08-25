@@ -51,6 +51,13 @@ const stableError = (error: ErrorObject): string => {
   return `${location}: ${detail}`;
 };
 
+const executionKey = (
+  runId: string,
+  nodeId: string,
+  laneId: string | undefined,
+  attempt: number,
+): string => `${runId}\u0000${nodeId}\u0000${laneId ?? ''}\u0000${attempt}`;
+
 export const validateFakeExecutorFixture = (value: unknown): string[] => {
   try {
     hashPortableJson(value, 256 * 1024);
@@ -60,20 +67,25 @@ export const validateFakeExecutorFixture = (value: unknown): string[] => {
   if (!fixtureValidator(value)) {
     return [...new Set((fixtureValidator.errors ?? []).map(stableError))].sort();
   }
-  const duplicateNodeIds = value.nodes
-    .map(({ nodeId }) => nodeId)
-    .filter((nodeId, index, all) => all.indexOf(nodeId) !== index);
+  const fixtureKeys = value.nodes.map(({ laneId, nodeId }) =>
+    `${nodeId}\u0000${laneId ?? ''}`);
+  const duplicateNodeIds = fixtureKeys
+    .filter((fixtureKey, index, all) => all.indexOf(fixtureKey) !== index);
   return [...new Set(duplicateNodeIds)]
     .sort()
-    .map((nodeId) => `$.nodes: nodeId 不能重复：${nodeId}`);
+    .map((fixtureKey) => {
+      const [nodeId, laneId] = fixtureKey.split('\u0000');
+      return `$.nodes: nodeId/laneId 不能重复：${nodeId}/${laneId || '-'}`;
+    });
 };
 
-/** Deterministic executor used by conformance tests and the Phase 1 CLI. */
+/** Deterministic executor used by serial/parallel conformance tests and the explicit fixture CLI. */
 export class FakeAgentExecutor implements AgentExecutorService {
   readonly id: string;
   readonly #fixture: FakeExecutorFixture;
   readonly #requests: AgentExecutionRequest[] = [];
   readonly #cancellations: AgentCancellationRequest[] = [];
+  readonly #activeDelays = new Map<string, () => void>();
 
   constructor(value: unknown) {
     const findings = validateFakeExecutorFixture(value);
@@ -94,6 +106,12 @@ export class FakeAgentExecutor implements AgentExecutorService {
 
   async cancel(request: AgentCancellationRequest): Promise<void> {
     this.#cancellations.push(structuredClone(request));
+    this.#activeDelays.get(executionKey(
+      request.runId,
+      request.nodeId,
+      request.laneId,
+      request.attempt,
+    ))?.();
   }
 
   async describe(): Promise<AgentExecutorCapabilities> {
@@ -102,7 +120,8 @@ export class FakeAgentExecutor implements AgentExecutorService {
 
   async execute(request: AgentExecutionRequest): Promise<AgentExecutionResult> {
     this.#requests.push(structuredClone(request));
-    const nodeFixture = this.#fixture.nodes.find(({ nodeId }) => nodeId === request.nodeId);
+    const nodeFixture = this.#fixture.nodes.find(({ laneId, nodeId }) =>
+      nodeId === request.nodeId && laneId === request.lane?.id);
     const attemptFixture = nodeFixture?.attempts[request.attempt - 1];
     if (!attemptFixture) {
       return {
@@ -115,6 +134,7 @@ export class FakeAgentExecutor implements AgentExecutorService {
         },
         executor: { id: this.id },
         findings: [],
+        ...(request.lane ? { laneId: request.lane.id } : {}),
         nodeId: request.nodeId,
         retryable: false,
         runId: request.runId,
@@ -128,6 +148,46 @@ export class FakeAgentExecutor implements AgentExecutorService {
       };
     }
 
+    if ((attemptFixture.delayMs ?? 0) > 0) {
+      const key = executionKey(
+        request.runId,
+        request.nodeId,
+        request.lane?.id,
+        request.attempt,
+      );
+      const cancelled = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          this.#activeDelays.delete(key);
+          resolve(false);
+        }, attemptFixture.delayMs);
+        this.#activeDelays.set(key, () => {
+          clearTimeout(timer);
+          this.#activeDelays.delete(key);
+          resolve(true);
+        });
+      });
+      if (cancelled) {
+        return {
+          apiVersion: AGENT_EXECUTOR_API_VERSION,
+          artifacts: [],
+          attempt: request.attempt,
+          executor: { id: this.id },
+          findings: [],
+          ...(request.lane ? { laneId: request.lane.id } : {}),
+          nodeId: request.nodeId,
+          retryable: false,
+          runId: request.runId,
+          status: 'cancelled',
+          usage: {
+            durationMs: 0,
+            inputTokens: null,
+            outputTokens: null,
+            toolCalls: null,
+          },
+        };
+      }
+    }
+
     const model = request.model?.required ?? request.model?.preferred;
     return {
       apiVersion: AGENT_EXECUTOR_API_VERSION,
@@ -138,6 +198,7 @@ export class FakeAgentExecutor implements AgentExecutorService {
         ...(model ? { model } : {}),
       },
       findings: structuredClone(attemptFixture.findings ?? []),
+      ...(request.lane ? { laneId: request.lane.id } : {}),
       nodeId: request.nodeId,
       retryable: attemptFixture.retryable ?? false,
       runId: request.runId,

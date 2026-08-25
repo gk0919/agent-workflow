@@ -1,0 +1,53 @@
+{
+  "$schema": "../schemas/fake-executor-fixture.schema.json",
+  "schemaVersion": 1,
+  "executorId": "fake/readonly-parallel-review",
+  "capabilities": {
+    "apiVersion": 1,
+    "capabilities": ["structured-output"],
+    "features": {
+      "cancellation": true,
+      "modelRouting": false,
+      "persistentResume": true,
+      "structuredOutput": true,
+      "toolAllowlist": true,
+      "usageReporting": true,
+      "workspaceIsolation": false
+    },
+    "maxConcurrency": 2
+  },
+  "nodes": [
+    {
+      "nodeId": "discover",
+      "attempts": [
+        {"status": "succeeded", "output": {"items": ["alpha", "beta"]}}
+      ]
+    },
+    {
+      "nodeId": "review-items",
+      "laneId": "item-000001",
+      "attempts": [
+        {"status": "succeeded", "output": {"finding": "shared"}, "delayMs": 20}
+      ]
+    },
+    {
+      "nodeId": "review-items",
+      "laneId": "item-000002",
+      "attempts": [
+        {"status": "succeeded", "output": {"finding": "shared"}, "delayMs": 5}
+      ]
+    },
+    {
+      "nodeId": "verify-a",
+      "attempts": [
+        {"status": "succeeded", "output": {"verdict": "confirmed-a"}}
+      ]
+    },
+    {
+      "nodeId": "verify-b",
+      "attempts": [
+        {"status": "succeeded", "output": {"verdict": "confirmed-b"}}
+      ]
+    }
+  ]
+}

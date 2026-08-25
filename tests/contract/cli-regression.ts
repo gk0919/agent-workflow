@@ -33,6 +33,7 @@ export const main = (): number => {
     assert.match(help.stdout, /\n  init\n/);
     assert.match(help.stdout, /\n  execution:plan\n/);
     assert.match(help.stdout, /\n  execution:run\n/);
+    assert.match(help.stdout, /\n  execution:parallel:run\n/);
     assert.match(help.stdout, /quality:policy/);
 
     const standalonePlanHelp = runCli(['execution:plan', '--help'], tmpdir());
@@ -41,6 +42,7 @@ export const main = (): number => {
     const standaloneRunHelp = runCli(['execution:run', '--help'], tmpdir());
     assert.equal(standaloneRunHelp.status, 0, standaloneRunHelp.stderr);
     assert.match(standaloneRunHelp.stdout, /execution:resume/);
+    assert.match(standaloneRunHelp.stdout, /--scheduler serial\|parallel/);
 
     const unknown = runCli(['unknown-command']);
     assert.equal(unknown.status, 1);

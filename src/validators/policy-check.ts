@@ -17,6 +17,7 @@ const POLICY_STEPS = Object.freeze([
   step('dist/tests/contract/cli-regression.js'),
   step('dist/tests/contract/execution-plan-regression.js'),
   step('dist/tests/contract/serial-runner-regression.js'),
+  step('dist/tests/contract/parallel-runner-regression.js'),
   step('dist/tests/contract/init-regression.js'),
   step('dist/src/core/profile.js', ['--check']),
   step('dist/tests/contract/profile-regression.js'),

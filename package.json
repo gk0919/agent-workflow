@@ -64,6 +64,8 @@
     "workflow:execution:resume": "node dist/bin/agent-workflow.js execution:resume",
     "workflow:execution:pause": "node dist/bin/agent-workflow.js execution:pause",
     "workflow:execution:cancel": "node dist/bin/agent-workflow.js execution:cancel",
+    "workflow:execution:parallel:run": "node dist/bin/agent-workflow.js execution:parallel:run",
+    "workflow:execution:parallel:resume": "node dist/bin/agent-workflow.js execution:parallel:resume",
     "workflow:feedback": "node dist/bin/agent-workflow.js feedback",
     "workflow:init": "node dist/bin/agent-workflow.js init",
     "workflow:init:test": "node dist/bin/agent-workflow.js init:test",

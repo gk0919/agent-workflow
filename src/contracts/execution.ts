@@ -15,6 +15,9 @@ export const WORKFLOW_NODE_TYPES = [
   'checkpoint',
   'gate',
   'join',
+  'map',
+  'parallel',
+  'reduce',
 ] as const;
 export type WorkflowNodeType = typeof WORKFLOW_NODE_TYPES[number];
 
@@ -63,6 +66,7 @@ export interface WorkflowWorkspaceRequirement {
 }
 
 export interface AgentWorkflowNode extends WorkflowNodeBase {
+  readonly failurePolicy?: WorkflowFailurePolicy;
   readonly outputSchema?: PortableJsonSchema;
   readonly permissions?: readonly PluginPermission[];
   readonly preferredCapabilities?: readonly string[];
@@ -70,6 +74,40 @@ export interface AgentWorkflowNode extends WorkflowNodeBase {
   readonly requiredCapabilities?: readonly string[];
   readonly type: 'agent';
   readonly workspace?: WorkflowWorkspaceRequirement;
+}
+
+export type WorkflowFailurePolicy = 'fail-fast' | 'isolate';
+
+export interface MapWorkflowNode extends WorkflowNodeBase {
+  readonly dependsOn: readonly [string];
+  readonly failurePolicy?: WorkflowFailurePolicy;
+  readonly itemsPointer?: string;
+  readonly maxItems: number;
+  readonly outputSchema?: PortableJsonSchema;
+  readonly permissions?: readonly PluginPermission[];
+  readonly preferredCapabilities?: readonly string[];
+  readonly prompt: string;
+  readonly requiredCapabilities?: readonly string[];
+  readonly type: 'map';
+  readonly workspace?: WorkflowWorkspaceRequirement;
+}
+
+export type WorkflowParallelMode = 'adversarial' | 'independent';
+
+export interface ParallelWorkflowNode extends WorkflowNodeBase {
+  readonly dependsOn: readonly string[];
+  readonly minSuccess?: number;
+  readonly mode: WorkflowParallelMode;
+  readonly type: 'parallel';
+}
+
+export type WorkflowReduceStrategy = 'collect' | 'dedupe';
+
+export interface ReduceWorkflowNode extends WorkflowNodeBase {
+  readonly dependsOn: readonly string[];
+  readonly itemsPointer?: string;
+  readonly strategy: WorkflowReduceStrategy;
+  readonly type: 'reduce';
 }
 
 export interface JoinWorkflowNode extends WorkflowNodeBase {
@@ -95,7 +133,10 @@ export type WorkflowNode =
   | AgentWorkflowNode
   | CheckpointWorkflowNode
   | GateWorkflowNode
-  | JoinWorkflowNode;
+  | JoinWorkflowNode
+  | MapWorkflowNode
+  | ParallelWorkflowNode
+  | ReduceWorkflowNode;
 
 export interface WorkflowDefinition {
   readonly $schema?: string;
@@ -112,6 +153,7 @@ export interface ExecutionEvent {
   readonly attempt?: number;
   readonly eventHash?: string;
   readonly eventId: string;
+  readonly laneId?: string;
   readonly nodeId?: string;
   readonly payload: Readonly<PluginJsonObject>;
   readonly previousEventHash?: string | null;
@@ -153,6 +195,12 @@ export interface AgentExecutionRequestLimits {
   readonly maxToolCalls: number;
 }
 
+export interface AgentExecutionLane {
+  readonly id: string;
+  readonly index: number;
+  readonly itemArtifact: string;
+}
+
 export interface AgentExecutionWorkspace {
   readonly bindingId?: string;
   readonly mode: WorkspaceMode;
@@ -165,6 +213,7 @@ export interface AgentExecutionRequest {
   readonly contextArtifacts: readonly string[];
   readonly idempotencyKey: string;
   readonly limits: AgentExecutionRequestLimits;
+  readonly lane?: AgentExecutionLane;
   readonly model?: AgentExecutionModelPolicy;
   readonly nodeId: string;
   readonly outputSchema?: PortableJsonSchema;
@@ -179,6 +228,7 @@ export interface AgentExecutionRequest {
 export interface AgentCancellationRequest {
   readonly apiVersion: typeof AGENT_EXECUTOR_API_VERSION;
   readonly attempt: number;
+  readonly laneId?: string;
   readonly nodeId: string;
   readonly runId: string;
 }
@@ -217,6 +267,7 @@ export interface AgentExecutionResult {
   };
   readonly error?: AgentExecutionError;
   readonly findings: readonly ValidationFinding[];
+  readonly laneId?: string;
   readonly nodeId: string;
   readonly output?: PluginJsonValue;
   readonly retryable: boolean;
@@ -284,6 +335,29 @@ export interface ExecutionRunNodeSummary {
   readonly type: WorkflowNodeType;
 }
 
+export interface ExecutionNodeUsageSummary {
+  readonly attempts: number;
+  readonly durationMs: number;
+  readonly executorCalls: number;
+  readonly failedCalls: number;
+  readonly inputTokens: number | null;
+  readonly nodeId: string;
+  readonly outputTokens: number | null;
+  readonly toolCalls: number | null;
+}
+
+export interface ExecutionRunUsageSummary {
+  readonly attempts: number;
+  readonly durationMs: number;
+  readonly executorCalls: number;
+  readonly failedCalls: number;
+  readonly inputTokens: number | null;
+  readonly maxConcurrencyObserved: number;
+  readonly nodes: readonly ExecutionNodeUsageSummary[];
+  readonly outputTokens: number | null;
+  readonly toolCalls: number | null;
+}
+
 export interface ExecutionRunResult {
   readonly error?: ExecutionRunError;
   readonly eventCount: number;
@@ -292,6 +366,7 @@ export interface ExecutionRunResult {
   readonly resultArtifact?: ExecutionArtifactReference;
   readonly runId: string;
   readonly status: ExecutionRunStatus;
+  readonly usage?: ExecutionRunUsageSummary;
   readonly workflowHash: string;
   readonly workflowId: string;
 }
@@ -302,7 +377,7 @@ export interface ExecutionControlResult {
   readonly status: 'cancelled' | 'completed' | 'failed' | 'paused';
 }
 
-/** Append-only event and content-addressed JSON persistence used by the serial kernel. */
+/** Append-only event and content-addressed JSON persistence used by the execution kernel. */
 export interface ExecutionJournalStore {
   readonly runId: string;
   append(event: ExecutionEvent): void;
@@ -313,6 +388,7 @@ export interface ExecutionJournalStore {
 
 export interface FakeExecutorAttemptFixture {
   readonly artifacts?: readonly string[];
+  readonly delayMs?: number;
   readonly error?: AgentExecutionError;
   readonly findings?: readonly ValidationFinding[];
   readonly output?: PluginJsonValue;
@@ -323,6 +399,7 @@ export interface FakeExecutorAttemptFixture {
 
 export interface FakeExecutorNodeFixture {
   readonly attempts: readonly FakeExecutorAttemptFixture[];
+  readonly laneId?: string;
   readonly nodeId: string;
 }
 
