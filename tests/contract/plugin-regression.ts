@@ -326,6 +326,7 @@ const packageBoundaryContract = (): void => {
   assert.ok(exportKeys.includes('./execution'));
   assert.ok(exportKeys.includes('./plugins/mcp-source-provider'));
   assert.ok(exportKeys.includes('./schemas/execution-event.json'));
+  assert.ok(exportKeys.includes('./schemas/agent-executor-process.json'));
   assert.ok(exportKeys.includes('./schemas/fake-executor-fixture.json'));
   assert.ok(exportKeys.includes('./schemas/workflow-definition.json'));
   assert.ok(exportKeys.every((key) => !key.startsWith('./examples/')));

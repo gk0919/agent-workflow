@@ -92,6 +92,20 @@ export type {
   WorkspaceMode,
 } from './execution.js';
 export {
+  AGENT_EXECUTOR_PROCESS_ACTIONS,
+  AGENT_EXECUTOR_PROCESS_PROTOCOL_VERSION,
+} from './executor-transport.js';
+export type {
+  AgentExecutorProcessAction,
+  AgentExecutorProcessDescribeRequest,
+  AgentExecutorProcessError,
+  AgentExecutorProcessExecuteRequest,
+  AgentExecutorProcessFailureResponse,
+  AgentExecutorProcessRequest,
+  AgentExecutorProcessResponse,
+  AgentExecutorProcessSuccessResponse,
+} from './executor-transport.js';
+export {
   PLUGIN_API_VERSION,
   PLUGIN_CAPABILITIES,
   PLUGIN_PERMISSIONS,

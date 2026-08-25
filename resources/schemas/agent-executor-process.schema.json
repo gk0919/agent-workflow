@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/agent-executor-process.schema.json",
+  "title": "Agent Executor Process Protocol Envelope",
+  "oneOf": [
+    {"$ref": "#/$defs/describeRequest"},
+    {"$ref": "#/$defs/executeRequest"},
+    {"$ref": "#/$defs/successResponse"},
+    {"$ref": "#/$defs/failureResponse"}
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["protocolVersion", "requestId"],
+      "properties": {
+        "protocolVersion": {"const": 1},
+        "requestId": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    },
+    "describeRequest": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["action"],
+          "properties": {
+            "protocolVersion": {"const": 1},
+            "requestId": {"type": "string", "minLength": 1, "maxLength": 512},
+            "action": {"const": "describe"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "executeRequest": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["action", "request"],
+          "properties": {
+            "protocolVersion": {"const": 1},
+            "requestId": {"type": "string", "minLength": 1, "maxLength": 512},
+            "action": {"const": "execute"},
+            "request": {"type": "object"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "successResponse": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["ok", "result"],
+          "properties": {
+            "protocolVersion": {"const": 1},
+            "requestId": {"type": "string", "minLength": 1, "maxLength": 512},
+            "ok": {"const": true},
+            "result": {"type": "object"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "failureResponse": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "required": ["ok", "error"],
+          "properties": {
+            "protocolVersion": {"const": 1},
+            "requestId": {"type": "string", "minLength": 1, "maxLength": 512},
+            "ok": {"const": false},
+            "error": {
+              "type": "object",
+              "required": ["code", "message"],
+              "properties": {
+                "code": {"type": "string", "minLength": 1},
+                "message": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

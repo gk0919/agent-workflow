@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Phase 0、Phase 1、Phase 2 已实现；Phase 3 及以后仍为 Proposed |
+| 状态 | Phase 0、Phase 1、Phase 2、Phase 3 已实现；Phase 4 及以后仍为 Proposed |
 | 最近评审 | 2026-08-25 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
@@ -45,8 +45,8 @@
 
 现有系统已经具备多 Agent 内核的控制面基础。Phase 0 已增加公共执行契约与静态编译器，
 Phase 1 已增加确定性串行 Runner、File Journal、内容寻址 Artifact 和 Fake Executor；
-Phase 2 已增加稳定批次的只读并行调度、动态 map lane、失败隔离和确定性归约。
-真实 Executor 与宿主 Adapter 仍未实现。
+Phase 2 已增加稳定批次的只读并行调度、动态 map lane、失败隔离和确定性归约；
+Phase 3 已增加原生宿主 Adapter、独立进程 Executor、能力协商和串行降级。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
@@ -327,7 +327,7 @@ Core hard limit
 
 同一 Workflow IR 支持三种执行方式：
 
-1. **Native Adapter**：编译为宿主原生 Workflow 或多 Agent 调用。
+1. **Native Adapter**：把宿主原生单 Agent 调用映射为标准 Executor；拓扑仍由 Kernel 调度。
 2. **Local Runner**：由 Node Host 通过 Agent Executor Plugin 调度。
 3. **Serial Fallback**：宿主不支持并行时按依赖顺序串行执行。
 
@@ -477,7 +477,7 @@ Reporter 应能观察：
 - conformance regression 覆盖完成顺序反转时事件序列一致、并发上限、Map lane 部分失败、
   deterministic dedupe、对抗汇总、进程中断恢复、超时取消、运行中外部取消、使用量和 CLI。
 
-上述退出标准已满足；Phase 3 才接入真实宿主 Executor，并验证跨宿主可移植性。
+上述退出标准已满足；Phase 3 在不改变 Phase 2 调度和 Journal 语义的前提下接入宿主 Executor。
 
 首个真实试点应选择只读、结果可独立验证的工作流，例如：
 
@@ -489,7 +489,7 @@ discover changed files
   -> ranked report
 ```
 
-### Phase 3：宿主执行器与可移植性
+### Phase 3：宿主执行器与可移植性（已完成）
 
 交付：
 
@@ -500,6 +500,28 @@ discover changed files
 - 跨 Executor conformance tests
 
 退出标准：同一 Workflow Definition 在至少两个宿主中保持节点、Gate、输出 Schema 和最终状态语义一致。
+
+当前实现（2026-08-25）：
+
+- `NativeHostAgentExecutor` 将进程内宿主的 capability、单节点 invoke 和可选 cancel 映射为
+  标准 `AgentExecutorService`。Adapter 补齐标准结果身份和 unknown usage，不接管拓扑、重试、
+  Gate、Schema 校验或 Journal。
+- `ProcessAgentExecutor` 通过版本化的单请求 stdin/stdout JSON 协议接入独立进程；每次调用使用
+  新进程、`shell: false`、显式 command/arguments、响应时间与 stdout/stderr 字节上限。
+  Workflow 不能选择进程命令，异常退出、损坏 JSON、协议版本和 request ID 不匹配均被拒绝。
+- `./schemas/agent-executor-process.json` 与 `./execution` 的 process protocol types 是正式包契约；
+  实现可用于 Node 以外语言，只需保持 JSON envelope 和 Executor Result 语义。
+- `negotiateExecutorCapabilities` 统一计算 required capability 错误、preferred capability 降级、
+  requested/effective concurrency 以及 `parallel`、`serial`、`serial-fallback` 模式。
+- `runPortableWorkflow` 默认允许 Generic Serial Fallback。Executor 只支持并发 1 时仍运行同一
+  IR 的全部节点、Gate、输出 Schema 和 Journal；`serialFallback: 'reject'` 可在首个事件前拒绝。
+- `executor-portability-regression` 用进程内原生宿主和独立 Node 子进程运行同一包含 Agent、Map、
+  Reduce、Gate 与输出 Schema 的 Definition，并比较节点摘要、内容寻址 Artifact、语义事件与终态；
+  同时覆盖无效结构化输出、降级拒绝、无效 JSON 和响应身份不匹配。
+
+上述退出标准已满足。具体宿主接入与 conformance 要求见
+[`EXECUTOR-PORTABILITY.md`](./EXECUTOR-PORTABILITY.md)。Phase 4 之前仍只允许共享只读 Workspace，
+不得借 Adapter 绕过 `maxExternalWrites: 0`、权限交集或外部写入 Approval。
 
 ### Phase 4：写入 Agent 与 Worktree
 

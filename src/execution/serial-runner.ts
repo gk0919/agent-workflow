@@ -35,6 +35,7 @@ import {
   validateJsonValue,
 } from '../core/execution-plan.js';
 import { errorMessage } from '../types/guards.js';
+import { negotiateExecutorCapabilities } from './capability-negotiation.js';
 import { calculateExecutionEventHash } from './file-journal.js';
 
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
@@ -63,7 +64,11 @@ export interface SerialExecutionOptions {
   readonly store: ExecutionJournalStore;
 }
 
-export type ParallelExecutionOptions = SerialExecutionOptions;
+export interface ParallelExecutionOptions extends SerialExecutionOptions {
+  readonly serialFallback?: 'allow' | 'reject';
+}
+
+export type PortableExecutionOptions = ParallelExecutionOptions;
 
 interface NodeReplayState {
   artifact?: ExecutionArtifactReference;
@@ -407,53 +412,16 @@ const resultStructureFinding = (value: unknown): string | undefined => {
   }
 };
 
-const supportedCapabilities = (capabilities: AgentExecutorCapabilities): Set<string> => {
-  const supported = new Set(capabilities.capabilities ?? []);
-  const features: ReadonlyArray<[keyof AgentExecutorCapabilities['features'], string]> = [
-    ['cancellation', 'cancellation'],
-    ['modelRouting', 'model-routing'],
-    ['persistentResume', 'persistent-resume'],
-    ['structuredOutput', 'structured-output'],
-    ['toolAllowlist', 'tool-allowlist'],
-    ['usageReporting', 'usage-reporting'],
-    ['workspaceIsolation', 'workspace-isolation'],
-  ];
-  for (const [key, name] of features) {
-    if (capabilities.features[key]) {
-      supported.add(name);
-    }
-  }
-  return supported;
-};
-
 const executorCompatibilityFindings = (
   definition: WorkflowDefinition,
   capabilities: AgentExecutorCapabilities,
 ): { errors: string[]; degraded: string[] } => {
-  const errors: string[] = [];
-  const degraded: string[] = [];
-  if (capabilities.apiVersion !== AGENT_EXECUTOR_API_VERSION) {
-    errors.push(`Executor API 版本不兼容：${capabilities.apiVersion}`);
-  }
-  if (!Number.isInteger(capabilities.maxConcurrency) || capabilities.maxConcurrency < 1) {
-    errors.push('Executor maxConcurrency 必须至少为 1');
-  }
-  const supported = supportedCapabilities(capabilities);
-  for (const node of definition.nodes) {
-    if (node.type !== 'agent' && node.type !== 'map') {
-      continue;
-    }
-    const missingRequired = (node.requiredCapabilities ?? [])
-      .filter((capability) => !supported.has(capability))
-      .sort();
-    if (missingRequired.length > 0) {
-      errors.push(`节点 ${node.id} 缺少 required capability：${missingRequired.join(', ')}`);
-    }
-    degraded.push(...(node.preferredCapabilities ?? [])
-      .filter((capability) => !supported.has(capability))
-      .map((capability) => `${node.id}:${capability}`));
-  }
-  return { errors: errors.sort(), degraded: [...new Set(degraded)].sort() };
+  const negotiation = negotiateExecutorCapabilities(definition, capabilities);
+  return {
+    errors: [...negotiation.errors],
+    degraded: negotiation.degradedCapabilities
+      .filter((capability) => !capability.startsWith('executor-concurrency:')),
+  };
 };
 
 const describeExecutor = async (
@@ -1988,14 +1956,17 @@ const runParallelWorkflowInternal = async (
   let effectiveConcurrency: number;
   if (mode === 'start') {
     const capabilities = await describeExecutor(options.executor);
-    const compatibility = executorCompatibilityFindings(definition, capabilities);
-    if (compatibility.errors.length > 0) {
-      throw new Error(`Executor 不兼容：\n- ${compatibility.errors.join('\n- ')}`);
+    const negotiation = negotiateExecutorCapabilities(definition, capabilities);
+    if (negotiation.errors.length > 0) {
+      throw new Error(`Executor 不兼容：\n- ${negotiation.errors.join('\n- ')}`);
     }
-    effectiveConcurrency = Math.min(
-      definition.limits.maxConcurrency,
-      capabilities.maxConcurrency,
-    );
+    if (negotiation.mode === 'serial-fallback' && options.serialFallback === 'reject') {
+      throw new Error(
+        `Executor 只能提供串行能力：requested=${negotiation.requestedConcurrency}, ` +
+        `effective=${negotiation.effectiveConcurrency}`,
+      );
+    }
+    effectiveConcurrency = negotiation.effectiveConcurrency;
     inputArtifact = options.store.writeJsonArtifact(input);
     writer.emit('run.created', {
       inputArtifact: artifactToJson(inputArtifact),
@@ -2003,12 +1974,10 @@ const runParallelWorkflowInternal = async (
     });
     writer.emit('run.started', {
       degradedCapabilities: [
-        ...compatibility.degraded,
-        ...(effectiveConcurrency < definition.limits.maxConcurrency
-          ? [`executor-concurrency:${capabilities.maxConcurrency}`]
-          : []),
+        ...negotiation.degradedCapabilities,
       ],
       effectiveConcurrency,
+      executorMode: negotiation.mode,
       executorId: options.executor.id,
       mode: 'parallel-readonly',
       requestedConcurrency: definition.limits.maxConcurrency,
@@ -2037,23 +2006,24 @@ const runParallelWorkflowInternal = async (
       return buildRunResult(definition, plan, options.store, existingEvents, 'paused');
     }
     const capabilities = await describeExecutor(options.executor);
-    const compatibility = executorCompatibilityFindings(definition, capabilities);
-    if (compatibility.errors.length > 0) {
-      throw new Error(`Executor 不兼容：\n- ${compatibility.errors.join('\n- ')}`);
+    const negotiation = negotiateExecutorCapabilities(definition, capabilities);
+    if (negotiation.errors.length > 0) {
+      throw new Error(`Executor 不兼容：\n- ${negotiation.errors.join('\n- ')}`);
     }
-    effectiveConcurrency = Math.min(
-      definition.limits.maxConcurrency,
-      capabilities.maxConcurrency,
-    );
+    if (negotiation.mode === 'serial-fallback' && options.serialFallback === 'reject') {
+      throw new Error(
+        `Executor 只能提供串行能力：requested=${negotiation.requestedConcurrency}, ` +
+        `effective=${negotiation.effectiveConcurrency}`,
+      );
+    }
+    effectiveConcurrency = negotiation.effectiveConcurrency;
     writer.emit('run.resumed', {
       ...(typeof checkpointNodeId === 'string' ? { approvedCheckpoint: checkpointNodeId } : {}),
       degradedCapabilities: [
-        ...compatibility.degraded,
-        ...(effectiveConcurrency < definition.limits.maxConcurrency
-          ? [`executor-concurrency:${capabilities.maxConcurrency}`]
-          : []),
+        ...negotiation.degradedCapabilities,
       ],
       effectiveConcurrency,
+      executorMode: negotiation.mode,
       reason: typeof checkpointNodeId === 'string' ? 'checkpoint-approved' : 'recovery',
     });
   }
@@ -2308,6 +2278,11 @@ export const runParallelWorkflow = async (
     return buildControlledRunResult(options, error.status);
   }
 };
+
+/** Portable Phase 3 entrypoint; defaults to deterministic serial fallback. */
+export const runPortableWorkflow = async (
+  options: PortableExecutionOptions,
+): Promise<ExecutionRunResult> => await runParallelWorkflow(options);
 
 const controlExecution = (
   store: ExecutionJournalStore,

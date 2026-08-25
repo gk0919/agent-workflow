@@ -6,6 +6,20 @@ export {
   WORKFLOW_DEFINITION_SCHEMA_VERSION,
   WORKFLOW_NODE_TYPES,
 } from '../contracts/execution.js';
+export {
+  AGENT_EXECUTOR_PROCESS_ACTIONS,
+  AGENT_EXECUTOR_PROCESS_PROTOCOL_VERSION,
+} from '../contracts/executor-transport.js';
+export type {
+  AgentExecutorProcessAction,
+  AgentExecutorProcessDescribeRequest,
+  AgentExecutorProcessError,
+  AgentExecutorProcessExecuteRequest,
+  AgentExecutorProcessFailureResponse,
+  AgentExecutorProcessRequest,
+  AgentExecutorProcessResponse,
+  AgentExecutorProcessSuccessResponse,
+} from '../contracts/executor-transport.js';
 export type {
   AgentCancellationRequest,
   AgentExecutionError,
@@ -67,6 +81,14 @@ export {
   validateWorkflowDefinition,
 } from '../core/execution-plan.js';
 export {
+  negotiateExecutorCapabilities,
+  supportedExecutorCapabilities,
+} from './capability-negotiation.js';
+export type {
+  ExecutorCapabilityNegotiation,
+  ExecutorConcurrencyMode,
+} from './capability-negotiation.js';
+export {
   FakeAgentExecutor,
   validateFakeExecutorFixture,
 } from './fake-executor.js';
@@ -75,10 +97,22 @@ export {
   FileExecutionJournalStore,
 } from './file-journal.js';
 export type { FileExecutionJournalOptions } from './file-journal.js';
+export { NativeHostAgentExecutor } from './native-host-executor.js';
+export type {
+  NativeAgentHost,
+  NativeAgentHostResult,
+} from './native-host-executor.js';
+export { ProcessAgentExecutor } from './process-executor.js';
+export type { ProcessAgentExecutorOptions } from './process-executor.js';
 export {
   cancelSerialWorkflow,
   pauseSerialWorkflow,
   runParallelWorkflow,
+  runPortableWorkflow,
   runSerialWorkflow,
 } from './serial-runner.js';
-export type { ParallelExecutionOptions, SerialExecutionOptions } from './serial-runner.js';
+export type {
+  ParallelExecutionOptions,
+  PortableExecutionOptions,
+  SerialExecutionOptions,
+} from './serial-runner.js';
