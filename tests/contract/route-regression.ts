@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -918,7 +920,19 @@ export const main = () => {
       ].join('\n')),
       /非法或越界文件路径/,
     );
-    assert.equal(
+    assert.throws(
+      () => analyzeMicroChangePatch([
+        'diff --git "a/\\056\\056/outside.js" "b/\\056\\056/outside.js"',
+        '--- "a/\\056\\056/outside.js"',
+        '+++ "b/\\056\\056/outside.js"',
+        '@@ -1 +1 @@',
+        '-a',
+        '+b',
+        '',
+      ].join('\n')),
+      /非法或越界文件路径/,
+    );
+    assert.deepEqual(
       analyzeMicroChangePatch([
         'diff --git "a/\\344\\270\\255.js" "b/\\344\\270\\255.js"',
         '--- "a/\\344\\270\\255.js"',
@@ -927,11 +941,16 @@ export const main = () => {
         '-a',
         '+b',
         '',
-      ].join('\n')).fileCount,
-      1,
+      ].join('\n')).files,
+      ['中.js'],
     );
 
-    const gitCalls: Array<{ args: string[]; cwd: string; input: string }> = [];
+    const gitCalls: Array<{
+      args: string[];
+      cwd: string;
+      patchContent: string | undefined;
+      patchPath: string | undefined;
+    }> = [];
     const guardedPatch = guardMicroChangePatch(
       {
         patch: microPatch,
@@ -939,8 +958,18 @@ export const main = () => {
       },
       config,
       {
-        runGit: ({ args, cwd, input = '' }) => {
-          gitCalls.push({ args, cwd, input });
+        runGit: ({ args, cwd }) => {
+          const patchPath = args[0] === 'apply'
+            ? args[args.length - 1]
+            : undefined;
+          gitCalls.push({
+            args,
+            cwd,
+            patchContent: patchPath
+              ? readFileSync(patchPath, 'utf8')
+              : undefined,
+            patchPath,
+          });
           return args.includes('rev-parse')
             ? { status: 0, stdout: `${'a'.repeat(40)}\n` }
             : { status: 0, stdout: '' };
@@ -952,10 +981,12 @@ export const main = () => {
     assert.equal(gitCalls.length, 2);
     assert.equal(gitCalls[0]?.cwd, workspaceRoot);
     assert.deepEqual(
-      gitCalls[0]?.args,
-      ['apply', '--reverse', '--check', '--whitespace=nowarn', '-'],
+      gitCalls[0]?.args.slice(0, -1),
+      ['apply', '--reverse', '--check', '--whitespace=nowarn', '--'],
     );
-    assert.equal(gitCalls[0]?.input, microPatch);
+    assert.ok(path.isAbsolute(gitCalls[0]?.patchPath ?? ''));
+    assert.equal(gitCalls[0]?.patchContent, microPatch);
+    assert.equal(existsSync(gitCalls[0]?.patchPath ?? ''), false);
     assert.throws(
       () => guardMicroChangePatch(
         { patch: microPatch, repository: '.' },
@@ -963,6 +994,41 @@ export const main = () => {
         { runGit: () => ({ status: 1, stdout: '' }) },
       ),
       /Micro Change Source Gate: patch 与仓库当前内容不一致/,
+    );
+    let timeoutPatchPath = '';
+    assert.throws(
+      () => guardMicroChangePatch(
+        { patch: microPatch, repository: '.' },
+        config,
+        {
+          runGit: ({ args }) => {
+            timeoutPatchPath = args[args.length - 1] ?? '';
+            return {
+              error: Object.assign(new Error('spawnSync git ETIMEDOUT'), {
+                code: 'ETIMEDOUT',
+              }),
+              status: null,
+            };
+          },
+        },
+      ),
+      /Micro Change Source Gate: Git patch 校验执行超时 \(ETIMEDOUT\)/,
+    );
+    assert.equal(existsSync(timeoutPatchPath), false);
+    assert.throws(
+      () => guardMicroChangePatch(
+        { patch: microPatch, repository: '.' },
+        config,
+        {
+          runGit: () => ({
+            error: Object.assign(new Error('spawnSync git ENOENT'), {
+              code: 'ENOENT',
+            }),
+            status: null,
+          }),
+        },
+      ),
+      /Micro Change Source Gate: 无法执行 Git patch 校验 \(ENOENT\)/,
     );
     assert.throws(
       () => guardMicroChangePatch(
@@ -976,6 +1042,47 @@ export const main = () => {
       ),
       /Micro Change Source Gate: 无法确认仓库 HEAD/,
     );
+
+    const sourceGateRepositoryRoot = mkdtempSync(
+      path.join(runtimeRoot, 'source-gate-repository-'),
+    );
+    const sourceGateFile = path.join(sourceGateRepositoryRoot, '说明.txt');
+    const runSourceGateGit = (args: string[]) => spawnSync('git', args, {
+      cwd: sourceGateRepositoryRoot,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      timeout: 30_000,
+      windowsHide: true,
+    });
+    try {
+      assert.equal(runSourceGateGit(['init', '--quiet']).status, 0);
+      writeFileSync(sourceGateFile, '初始内容\n', 'utf8');
+      assert.equal(runSourceGateGit(['add', '--', '说明.txt']).status, 0);
+      assert.equal(runSourceGateGit([
+        '-c', 'user.name=Agent Workflow',
+        '-c', 'user.email=workflow@example.invalid',
+        'commit', '--quiet', '-m', 'fixture',
+      ]).status, 0);
+      writeFileSync(sourceGateFile, '更新后的中文内容\n', 'utf8');
+      const sourceGateDiff = runSourceGateGit([
+        'diff', '--binary', '--', '说明.txt',
+      ]);
+      assert.equal(sourceGateDiff.status, 0);
+      assert.match(sourceGateDiff.stdout ?? '', /更新后的中文内容/);
+      const sourceGateRepository = path
+        .relative(workspaceRoot, sourceGateRepositoryRoot)
+        .split(path.sep)
+        .join('/');
+      const realGitGuard = guardMicroChangePatch({
+        patch: sourceGateDiff.stdout ?? '',
+        repository: sourceGateRepository,
+      }, config);
+      assert.equal(realGitGuard.sourceMode, 'repository-reverse-check');
+      assert.deepEqual(realGitGuard.files, ['说明.txt']);
+      assert.match(realGitGuard.sourceHash, /^[a-f0-9]{16}$/);
+    } finally {
+      rmSync(sourceGateRepositoryRoot, { force: true, recursive: true });
+    }
 
     const microBriefContent = readFileSync(
       path.join(

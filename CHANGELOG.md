@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 修复 Micro Change Source Gate 在 Windows 上通过同步 stdin 校验中文补丁时可能超时并误报 patch mismatch；Git 改读受控临时文件，并正确解码 Git 引号路径。
 - 完成多 Agent 执行内核 Phase 4：显式写入 effect、Approval、Run/Node/Lane 隔离 Worktree、文件 ownership/资源锁、Integrator、合并后验证和副作用恢复协议。
 - 增加 `agent-workflow init`，安全生成宿主配置、Profile 覆盖层、目录、根入口、忽略规则和 npm scripts。
 - Profile 支持带循环、深度和路径门禁的 `extends` 递归覆盖；对象合并，数组替换。

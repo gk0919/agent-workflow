@@ -1,7 +1,17 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import {
+  resolveWorkspaceRelativePath,
+  workflowRelativePath,
+} from '../config/workflow-config.js';
 import {
   loadRoutes,
   workspaceRoot,
@@ -33,11 +43,11 @@ export interface MicroPatchAnalysis {
 interface GitCommandOptions {
   args: string[];
   cwd: string;
-  input?: string;
 }
 
 interface GitCommandResult {
-  error?: Error;
+  error?: Error & { code?: string };
+  signal?: string | null;
   status: number | null;
   stderr?: string;
   stdout?: string;
@@ -84,18 +94,71 @@ const ALLOWED_METADATA = [
 const hashText = (value: string): string =>
   createHash('sha256').update(value).digest('hex');
 
-const runGitCommand: GitRunner = ({ args, cwd, input = '' }) => spawnSync(
+const runGitCommand: GitRunner = ({ args, cwd }) => spawnSync(
   'git',
   ['--no-optional-locks', ...args],
   {
     cwd,
     encoding: 'utf8',
-    input,
     maxBuffer: 1024 * 1024,
-    timeout: 10_000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 30_000,
     windowsHide: true,
   },
 );
+
+const withTemporaryPatchFile = <T>(
+  patch: string,
+  action: (patchPath: string) => T,
+): T => {
+  const patchRoot = resolveWorkspaceRelativePath(
+    workflowRelativePath('runtimeRoot', 'patches'),
+    'Micro Change Source Gate 临时目录',
+  );
+  mkdirSync(patchRoot, { recursive: true });
+  // A unique owned directory avoids Windows stdin pipe stalls and cleanup collisions.
+  const temporaryDirectory = mkdtempSync(
+    path.join(patchRoot, '.source-gate-'),
+  );
+  const patchPath = path.join(temporaryDirectory, 'input.patch');
+  try {
+    writeFileSync(patchPath, Buffer.from(patch, 'utf8'), { flag: 'wx' });
+    return action(patchPath);
+  } finally {
+    rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+};
+
+const throwGitExecutionError = (
+  operation: string,
+  result: GitCommandResult,
+): never => {
+  const code = result.error?.code;
+  const detail = code
+    ? ` (${code})`
+    : result.signal
+      ? ` (${result.signal})`
+      : '';
+  if (code === 'ETIMEDOUT') {
+    throw new Error(
+      `Micro Change Source Gate: Git ${operation}执行超时${detail}；` +
+      '请重试，持续发生时检查 Git 与本机进程环境',
+    );
+  }
+  throw new Error(
+    `Micro Change Source Gate: 无法执行 Git ${operation}${detail}；` +
+    '请检查 Git 安装与本机进程环境',
+  );
+};
+
+const assertGitExecutionCompleted = (
+  operation: string,
+  result: GitCommandResult,
+): void => {
+  if (result.error || result.status === null) {
+    throwGitExecutionError(operation, result);
+  }
+};
 
 export const guardMicroRepository = (
   repository: unknown,
@@ -130,6 +193,62 @@ export const guardMicroRepository = (
   };
 };
 
+const GIT_QUOTED_ESCAPES: Record<string, number> = {
+  '"': 0x22,
+  '\\': 0x5c,
+  a: 0x07,
+  b: 0x08,
+  f: 0x0c,
+  n: 0x0a,
+  r: 0x0d,
+  t: 0x09,
+  v: 0x0b,
+};
+
+const decodeGitQuotedPath = (value: string): string => {
+  // Git quotes non-ASCII path bytes as C-style octal escapes, not Unicode escapes.
+  const chunks: Buffer[] = [];
+  let literal = '';
+  const flushLiteral = (): void => {
+    if (literal) {
+      chunks.push(Buffer.from(literal, 'utf8'));
+      literal = '';
+    }
+  };
+
+  for (let index = 0; index < value.length;) {
+    if (value[index] !== '\\') {
+      literal += value[index];
+      index += 1;
+      continue;
+    }
+    flushLiteral();
+    const octal = value.slice(index + 1, index + 4);
+    if (/^[0-7]{3}$/.test(octal)) {
+      const byte = Number.parseInt(octal, 8);
+      if (byte > 0xff) {
+        throw new Error('Micro Change patch 包含非法 Git 路径转义');
+      }
+      chunks.push(Buffer.from([byte]));
+      index += 4;
+      continue;
+    }
+    const escaped = value[index + 1] ?? '';
+    const byte = GIT_QUOTED_ESCAPES[escaped];
+    if (byte === undefined) {
+      throw new Error('Micro Change patch 包含非法 Git 路径转义');
+    }
+    chunks.push(Buffer.from([byte]));
+    index += 2;
+  }
+  flushLiteral();
+  const decoded = Buffer.concat(chunks).toString('utf8');
+  if (decoded.includes('\uFFFD')) {
+    throw new Error('Micro Change patch 的 Git 路径不是有效 UTF-8');
+  }
+  return decoded;
+};
+
 const normalizePatchPath = (
   value: string,
   expectedPrefix: string,
@@ -139,17 +258,17 @@ const normalizePatchPath = (
     return null;
   }
   const quoted = trimmed.startsWith('"') && trimmed.endsWith('"');
-  const normalized = quoted ? trimmed.slice(1, -1) : trimmed;
+  const normalized = quoted
+    ? decodeGitQuotedPath(trimmed.slice(1, -1))
+    : trimmed;
   if (!normalized.startsWith(expectedPrefix)) {
     throw new Error(
       `Micro Change patch 文件路径必须以 ${expectedPrefix} 开头`,
     );
   }
   const relativePath = normalized.slice(expectedPrefix.length);
-  const invalidEscape = quoted && relativePath
-    .replace(/\\(?:[0-7]{3}|["\\abfnrtv])/g, '')
-    .includes('\\');
-  if (!relativePath || (!quoted && relativePath.includes('\\')) || invalidEscape ||
+  if (!relativePath || relativePath.includes('\\') ||
+      /[\x00-\x1f\x7f]/.test(relativePath) ||
       relativePath.split('/').some((part) => part === '.' || part === '..')) {
     throw new Error('Micro Change patch 包含非法或越界文件路径');
   }
@@ -407,12 +526,19 @@ export const verifyMicroPatchSource = ({
 }, {
   runGit = runGitCommand,
 }: { runGit?: GitRunner } = {}): { sourceHash: string; sourceMode: string } => {
-  const reverseCheck = runGit({
-    args: ['apply', '--reverse', '--check', '--whitespace=nowarn', '-'],
+  const reverseCheck = withTemporaryPatchFile(patch, (patchPath) => runGit({
+    args: [
+      'apply',
+      '--reverse',
+      '--check',
+      '--whitespace=nowarn',
+      '--',
+      patchPath,
+    ],
     cwd: repositoryRoot,
-    input: patch,
-  });
-  if (reverseCheck?.error || reverseCheck?.status !== 0) {
+  }));
+  assertGitExecutionCompleted('patch 校验', reverseCheck);
+  if (reverseCheck.status !== 0) {
     throw new Error(
       'Micro Change Source Gate: patch 与仓库当前内容不一致；' +
       '请从当前任务改动重新生成 unified diff',
@@ -423,6 +549,7 @@ export const verifyMicroPatchSource = ({
     args: ['rev-parse', '--verify', 'HEAD'],
     cwd: repositoryRoot,
   });
+  assertGitExecutionCompleted('HEAD 校验', revisionResult);
   const revision = revisionResult?.status === 0
     ? revisionResult.stdout?.trim().toLowerCase() ?? ''
     : '';
