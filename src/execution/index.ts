@@ -55,12 +55,15 @@ export type {
   GateWorkflowNode,
   JoinWorkflowNode,
   MapWorkflowNode,
+  IntegratorWorkflowNode,
   ParallelWorkflowNode,
   PortableJsonSchema,
   StaticExecutionPlan,
   StaticExecutionPlanNode,
   ReduceWorkflowNode,
   WorkflowDefinition,
+  WorkflowEffectKind,
+  WorkflowEffectRequirement,
   WorkflowExecutionLimits,
   WorkflowFailurePolicy,
   WorkflowGateCondition,
@@ -71,6 +74,18 @@ export type {
   WorkflowReduceStrategy,
   WorkflowWorkspaceRequirement,
   WorkspaceMode,
+  ExecutionIntegrationFinding,
+  ExecutionIntegrationRequest,
+  ExecutionIntegrationResult,
+  ExecutionIntegrationStatus,
+  ExecutionWorkspaceBinding,
+  ExecutionWorkspaceBindRequest,
+  ExecutionWorkspaceChange,
+  ExecutionWorkspaceFinalizeRequest,
+  ExecutionWorkspaceRecoveryRequest,
+  ExecutionWorkspaceRecoveryResult,
+  ExecutionWorkspaceRecoveryStatus,
+  ExecutionWorkspaceService,
 } from '../contracts/execution.js';
 export {
   compileStaticExecutionPlan,
@@ -104,15 +119,22 @@ export type {
 } from './native-host-executor.js';
 export { ProcessAgentExecutor } from './process-executor.js';
 export type { ProcessAgentExecutorOptions } from './process-executor.js';
+export { GitWorktreeWorkspaceService } from './git-worktree-workspace.js';
+export type {
+  GitWorkspaceVerificationRequest,
+  GitWorktreeWorkspaceOptions,
+} from './git-worktree-workspace.js';
 export {
   cancelSerialWorkflow,
   pauseSerialWorkflow,
   runParallelWorkflow,
   runPortableWorkflow,
   runSerialWorkflow,
+  runWritableWorkflow,
 } from './serial-runner.js';
 export type {
   ParallelExecutionOptions,
   PortableExecutionOptions,
   SerialExecutionOptions,
+  WritableExecutionOptions,
 } from './serial-runner.js';

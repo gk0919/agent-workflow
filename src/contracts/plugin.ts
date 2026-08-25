@@ -8,6 +8,7 @@ export const PLUGIN_CAPABILITIES = [
   'source-provider',
   'agent-adapter',
   'agent-executor',
+  'execution-workspace',
   'context-provider',
   'validator',
   'route-extension',
@@ -24,6 +25,7 @@ export type PluginCapability = typeof PLUGIN_CAPABILITIES[number];
 export const STANDARD_PLUGIN_SERVICES = Object.freeze({
   'agent-adapter': 'workflow/agent-adapter',
   'agent-executor': 'workflow/agent-executor',
+  'execution-workspace': 'workflow/execution-workspace',
   'approval-provider': 'workflow/approval-provider',
   'artifact-store': 'workflow/artifact-store',
   'context-provider': 'workflow/context-provider',

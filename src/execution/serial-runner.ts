@@ -15,11 +15,15 @@ import {
   type ExecutionEvent,
   type ExecutionEventType,
   type ExecutionJournalStore,
+  type ExecutionWorkspaceBinding,
+  type ExecutionWorkspaceChange,
+  type ExecutionWorkspaceService,
   type ExecutionRunError,
   type ExecutionRunNodeSummary,
   type ExecutionRunResult,
   type ExecutionRunUsageSummary,
   type GateWorkflowNode,
+  type IntegratorWorkflowNode,
   type JoinWorkflowNode,
   type MapWorkflowNode,
   type ParallelWorkflowNode,
@@ -66,9 +70,16 @@ export interface SerialExecutionOptions {
 
 export interface ParallelExecutionOptions extends SerialExecutionOptions {
   readonly serialFallback?: 'allow' | 'reject';
+  readonly workspace?: ExecutionWorkspaceService;
 }
 
 export type PortableExecutionOptions = ParallelExecutionOptions;
+
+export type WritableExecutionOptions = ParallelExecutionOptions;
+
+type ResolvedWritableExecutionOptions = ParallelExecutionOptions & {
+  readonly workspace: ExecutionWorkspaceService;
+};
 
 interface NodeReplayState {
   artifact?: ExecutionArtifactReference;
@@ -103,6 +114,11 @@ interface ParallelAgentTask {
 
 interface ScheduledParallelTask extends ParallelAgentTask {
   readonly attempt: number;
+}
+
+interface BoundParallelTask extends ScheduledParallelTask {
+  readonly binding?: ExecutionWorkspaceBinding;
+  readonly effectId?: string;
 }
 
 interface ParallelTaskFailure {
@@ -277,7 +293,12 @@ const phaseOnePolicyFindings = (definition: WorkflowDefinition): string[] => {
     findings.push('Phase 1 要求 limits.maxExternalWrites 为 0');
   }
   for (const node of definition.nodes) {
-    if (node.type === 'map' || node.type === 'parallel' || node.type === 'reduce') {
+    if (
+      node.type === 'integrator' ||
+      node.type === 'map' ||
+      node.type === 'parallel' ||
+      node.type === 'reduce'
+    ) {
       findings.push(`节点 ${node.id}：Phase 1 不支持 ${node.type} 节点`);
       continue;
     }
@@ -306,6 +327,10 @@ const phaseTwoPolicyFindings = (definition: WorkflowDefinition): string[] => {
     findings.push('Phase 2 要求 limits.maxExternalWrites 为 0');
   }
   for (const node of definition.nodes) {
+    if (node.type === 'integrator') {
+      findings.push(`节点 ${node.id}：Phase 2 不支持 integrator 节点`);
+      continue;
+    }
     if (node.type !== 'agent' && node.type !== 'map') {
       continue;
     }
@@ -320,6 +345,37 @@ const phaseTwoPolicyFindings = (definition: WorkflowDefinition): string[] => {
       .sort();
     if (unsafePermissions.length > 0) {
       findings.push(`节点 ${node.id}：Phase 2 不允许权限 ${unsafePermissions.join(', ')}`);
+    }
+  }
+  return findings.sort();
+};
+
+const phaseFourPolicyFindings = (definition: WorkflowDefinition): string[] => {
+  const findings: string[] = [];
+  for (const node of definition.nodes) {
+    if (node.type !== 'agent' && node.type !== 'map') {
+      continue;
+    }
+    if (!node.effect) {
+      if (node.workspace?.mode === 'exclusive-worktree' || node.workspace?.repository) {
+        findings.push(`节点 ${node.id}：无 effect 的节点只能使用共享只读 Workspace`);
+      }
+      const unsafePermissions = (node.permissions ?? [])
+        .filter((permission) => !SAFE_READONLY_PERMISSIONS.has(permission))
+        .sort();
+      if (unsafePermissions.length > 0) {
+        findings.push(`节点 ${node.id}：无 effect 时不允许权限 ${unsafePermissions.join(', ')}`);
+      }
+      continue;
+    }
+    if (node.failurePolicy === 'isolate') {
+      findings.push(`节点 ${node.id}：写入 effect 不允许 failurePolicy isolate`);
+    }
+    if (
+      node.effect.kind === 'external-write' &&
+      (node.workspace?.mode === 'exclusive-worktree' || node.workspace?.repository)
+    ) {
+      findings.push(`节点 ${node.id}：external-write 不能声明 repository Workspace`);
     }
   }
   return findings.sort();
@@ -988,11 +1044,15 @@ const buildRunResult = (
         ? 'checkpoint-required' as const
         : pauseReason === 'executor-blocked'
           ? 'executor-blocked' as const
+          : pauseReason === 'effect-recovery-required'
+            ? 'effect-recovery-required' as const
           : 'paused' as const,
       message: pauseReason === 'checkpoint'
         ? 'Execution Run 等待 Checkpoint 批准'
         : pauseReason === 'executor-blocked'
           ? 'Execution Run 被 Executor 阻断'
+          : pauseReason === 'effect-recovery-required'
+            ? 'Execution Run 等待副作用恢复确认'
           : 'Execution Run 已暂停',
       ...(typeof pausedNodeId === 'string' ? { nodeId: pausedNodeId } : {}),
     }
@@ -1171,7 +1231,12 @@ const runSerialWorkflowInternal = async (
     }
 
     if (node.type !== 'agent') {
-      if (node.type === 'map' || node.type === 'parallel' || node.type === 'reduce') {
+      if (
+        node.type === 'integrator' ||
+        node.type === 'map' ||
+        node.type === 'parallel' ||
+        node.type === 'reduce'
+      ) {
         throw new Error(`Phase 1 不支持 ${node.type} 节点`);
       }
       writer.emit('node.scheduled', { mode: 'deterministic' }, { attempt, nodeId: node.id });
@@ -1398,6 +1463,121 @@ const parallelNodeIdentity = (
   ...(task.lane ? { laneId: task.lane.id } : {}),
 });
 
+const materializeEffectValues = (
+  values: readonly string[] | undefined,
+  task: ParallelAgentTask,
+): string[] => [...new Set((values ?? []).map((value) => {
+  if (value.includes('{lane}')) {
+    if (!task.lane) {
+      throw new Error(`节点 ${task.node.id} 的 effect 模板需要 lane`);
+    }
+    return value.replaceAll('{lane}', task.lane.id);
+  }
+  return value;
+}))].sort();
+
+const taskResourceLocks = (task: ParallelAgentTask): string[] => {
+  const effect = task.node.effect;
+  if (!effect) {
+    return [];
+  }
+  const repository = task.node.workspace?.repository ?? 'external';
+  const values = effect.resourceLocks ?? effect.ownedPaths ?? [task.node.id];
+  return materializeEffectValues(values, task)
+    .map((value) => serializeCanonicalJson([effect.kind, repository, value]))
+    .sort();
+};
+
+const takeLockSafeWave = (
+  queue: ScheduledParallelTask[],
+  limit: number,
+): ScheduledParallelTask[] => {
+  const selected: ScheduledParallelTask[] = [];
+  const locks = new Set<string>();
+  for (let index = 0; index < queue.length && selected.length < limit;) {
+    const task = queue[index] as ScheduledParallelTask;
+    const taskLocks = taskResourceLocks(task);
+    if (taskLocks.some((lock) => locks.has(lock))) {
+      index += 1;
+      continue;
+    }
+    queue.splice(index, 1);
+    selected.push(task);
+    taskLocks.forEach((lock) => locks.add(lock));
+  }
+  if (selected.length === 0 && queue.length > 0) {
+    selected.push(queue.shift() as ScheduledParallelTask);
+  }
+  return selected;
+};
+
+const effectEventFor = (
+  events: readonly ExecutionEvent[],
+  task: ParallelAgentTask,
+  type: 'node.effect-confirmed' | 'node.effect-prepared',
+): ExecutionEvent | undefined => [...events].reverse().find((event) =>
+  event.type === type &&
+  event.nodeId === task.node.id &&
+  event.laneId === task.lane?.id);
+
+const effectIdFromEvent = (event: ExecutionEvent): string => {
+  const effectId = objectValue(event.payload, `${event.type}.payload`).effectId;
+  if (typeof effectId !== 'string' || effectId.length === 0) {
+    throw new Error(`${event.type} 缺少 effectId`);
+  }
+  return effectId;
+};
+
+const workspaceChangeToJson = (change: ExecutionWorkspaceChange): PluginJsonObject => ({
+  baseCommit: change.baseCommit,
+  bindingId: change.bindingId,
+  changedPaths: [...change.changedPaths],
+  commit: change.commit,
+  effectId: change.effectId,
+  outputArtifact: artifactToJson(change.outputArtifact),
+  ownedPaths: [...change.ownedPaths],
+  repository: change.repository,
+});
+
+const workspaceChangeFromJson = (value: unknown): ExecutionWorkspaceChange => {
+  const record = objectValue(value, 'workspace change');
+  const stringArray = (item: unknown, label: string): string[] => {
+    if (!Array.isArray(item) || item.some((entry) => typeof entry !== 'string')) {
+      throw new Error(`${label} 必须是 string array`);
+    }
+    return [...item] as string[];
+  };
+  if (
+    typeof record.baseCommit !== 'string' ||
+    typeof record.bindingId !== 'string' ||
+    typeof record.commit !== 'string' ||
+    typeof record.effectId !== 'string' ||
+    typeof record.repository !== 'string'
+  ) {
+    throw new Error('workspace change 身份字段无效');
+  }
+  return {
+    baseCommit: record.baseCommit,
+    bindingId: record.bindingId,
+    changedPaths: stringArray(record.changedPaths, 'workspace change.changedPaths'),
+    commit: record.commit,
+    effectId: record.effectId,
+    outputArtifact: artifactFromJson(record.outputArtifact, 'workspace change.outputArtifact'),
+    ownedPaths: stringArray(record.ownedPaths, 'workspace change.ownedPaths'),
+    repository: record.repository,
+  };
+};
+
+const dependencyWorkspaceChanges = (
+  node: IntegratorWorkflowNode,
+  events: readonly ExecutionEvent[],
+): ExecutionWorkspaceChange[] => node.dependsOn.flatMap((dependencyId) => events
+  .filter((event) => event.type === 'node.effect-confirmed' && event.nodeId === dependencyId)
+  .map((event) => workspaceChangeFromJson(
+    objectValue(event.payload, 'node.effect-confirmed.payload').change,
+  )))
+  .sort((left, right) => compareStrings(left.bindingId, right.bindingId));
+
 const journalControlStatus = (
   writer: EventWriter,
 ): ExecutionRunResult['status'] | undefined => {
@@ -1489,7 +1669,7 @@ const executorFailureResult = (
 };
 
 const buildParallelRequest = (
-  task: ScheduledParallelTask,
+  task: BoundParallelTask,
   inputArtifact: ExecutionArtifactReference,
   runId: string,
   remainingDuration: number,
@@ -1523,6 +1703,11 @@ const buildParallelRequest = (
   requiredCapabilities: [...(task.node.requiredCapabilities ?? [])],
   runId,
   workspace: {
+    ...(task.binding ? {
+      baseCommit: task.binding.baseCommit,
+      bindingId: task.binding.bindingId,
+      rootPath: task.binding.rootPath,
+    } : {}),
     mode: task.node.workspace?.mode ?? 'shared-readonly',
     ...(task.node.workspace?.repository
       ? { repository: task.node.workspace.repository }
@@ -1558,9 +1743,11 @@ const executeParallelTasks = async (
       });
     }
 
-    const wave = queue.splice(0, effectiveConcurrency);
-    const overAttempt = wave.filter(({ attempt }) =>
-      attempt > definition.limits.maxAttemptsPerNode);
+    const wave = takeLockSafeWave(queue, effectiveConcurrency);
+    const overAttempt = wave.filter((task) =>
+      task.attempt > definition.limits.maxAttemptsPerNode &&
+      !effectEventFor(writer.events, task, 'node.effect-confirmed') &&
+      !effectEventFor(writer.events, task, 'node.effect-prepared'));
     if (overAttempt.length > 0) {
       const first = overAttempt.sort((left, right) => compareStrings(left.key, right.key))[0];
       if (!first) {
@@ -1577,11 +1764,143 @@ const executeParallelTasks = async (
       1,
       definition.limits.maxDurationMs - activeDurationMs(writer.events, now()),
     );
+    const boundWave: BoundParallelTask[] = [];
     for (const task of wave) {
+      const effect = task.node.effect;
+      let binding: ExecutionWorkspaceBinding | undefined;
+      if (effect?.kind === 'repository-write') {
+        if (!options.workspace || !task.node.workspace?.repository) {
+          throw new Error(`节点 ${task.node.id} 缺少 Execution Workspace Service`);
+        }
+        binding = await options.workspace.bind({
+          ...(task.lane ? { laneId: task.lane.id } : {}),
+          nodeId: task.node.id,
+          ownedPaths: materializeEffectValues(effect.ownedPaths, task),
+          purpose: 'agent',
+          repository: task.node.workspace.repository,
+          runId: options.store.runId,
+        });
+      }
+      const confirmed = effect ? effectEventFor(writer.events, task, 'node.effect-confirmed') : undefined;
+      const prepared = effect ? effectEventFor(writer.events, task, 'node.effect-prepared') : undefined;
+      if (confirmed) {
+        let outputArtifact = artifactFromJson(
+          objectValue(confirmed.payload, 'node.effect-confirmed.payload').outputArtifact,
+          'node.effect-confirmed.payload.outputArtifact',
+        );
+        if (effect?.kind === 'repository-write') {
+          const recovery = await options.workspace?.recover({
+            binding: binding as ExecutionWorkspaceBinding,
+            effectId: effectIdFromEvent(confirmed),
+          });
+          if (recovery?.status !== 'recovered' || !recovery.change) {
+            writer.emit('run.paused', {
+              nodeId: task.node.id,
+              reason: 'effect-recovery-required',
+            });
+            return buildRunResult(definition, plan, options.store, writer.events, 'paused');
+          }
+          outputArtifact = recovery.change.outputArtifact;
+        }
+        options.store.readJsonArtifact(outputArtifact);
+        const identity = parallelNodeIdentity(task, confirmed.attempt as number);
+        writer.emit('node.completed', {
+          artifact: artifactToJson(outputArtifact),
+          recoveredEffect: effectIdFromEvent(confirmed),
+        }, identity);
+        task.state.artifact = outputArtifact;
+        task.state.completed = true;
+        task.state.failed = false;
+        continue;
+      }
+      let effectId = effect
+        ? [options.store.runId, task.node.id, task.lane?.id, task.attempt, 'effect']
+          .filter((part) => part !== undefined)
+          .join(':')
+        : undefined;
+      if (effect && prepared) {
+        effectId = effectIdFromEvent(prepared);
+        if (effect.kind === 'external-write') {
+          writer.emit('run.paused', {
+            effectId,
+            nodeId: task.node.id,
+            reason: 'effect-recovery-required',
+          });
+          return buildRunResult(definition, plan, options.store, writer.events, 'paused');
+        }
+        const recovery = await options.workspace?.recover({
+          binding: binding as ExecutionWorkspaceBinding,
+          effectId,
+        });
+        if (recovery?.status === 'recovered' && recovery.change) {
+          const output = options.store.readJsonArtifact(recovery.change.outputArtifact);
+          hashPortableJson(output, DEFAULT_MAX_OUTPUT_BYTES);
+          const identity = parallelNodeIdentity(task, task.attempt);
+          writer.emit('node.output-validated', {
+            artifact: artifactToJson(recovery.change.outputArtifact),
+            findings: [],
+            recovered: true,
+          }, identity);
+          writer.emit('node.effect-confirmed', {
+            change: workspaceChangeToJson(recovery.change),
+            effectId,
+            kind: effect.kind,
+            outputArtifact: artifactToJson(recovery.change.outputArtifact),
+            recovered: true,
+          }, identity);
+          writer.emit('node.completed', {
+            artifact: artifactToJson(recovery.change.outputArtifact),
+            recoveredEffect: effectId,
+          }, identity);
+          task.state.artifact = recovery.change.outputArtifact;
+          task.state.completed = true;
+          task.state.failed = false;
+          continue;
+        }
+        if (recovery?.status !== 'ready') {
+          writer.emit('run.paused', {
+            effectId,
+            nodeId: task.node.id,
+            reason: 'effect-recovery-required',
+          });
+          return buildRunResult(definition, plan, options.store, writer.events, 'paused');
+        }
+      }
+      boundWave.push({
+        ...task,
+        ...(prepared?.attempt ? { attempt: prepared.attempt } : {}),
+        ...(binding ? { binding } : {}),
+        ...(effectId ? { effectId } : {}),
+      });
+    }
+    if (boundWave.length === 0) {
+      continue;
+    }
+    for (const task of boundWave) {
       const identity = parallelNodeIdentity(task, task.attempt);
       writer.emit('node.scheduled', { mode: 'executor-parallel' }, identity);
+      if (task.binding) {
+        writer.emit('node.workspace-bound', {
+          baseCommit: task.binding.baseCommit,
+          bindingId: task.binding.bindingId,
+          ownedPaths: [...task.binding.ownedPaths],
+          repository: task.binding.repository,
+        }, identity);
+      }
+      if (task.node.effect && task.effectId && !effectEventFor(
+        writer.events,
+        task,
+        'node.effect-prepared',
+      )) {
+        writer.emit('node.effect-prepared', {
+          approvalCheckpoint: task.node.effect.approvalCheckpoint,
+          effectId: task.effectId,
+          kind: task.node.effect.kind,
+          resourceLocks: taskResourceLocks(task),
+        }, identity);
+      }
       writer.emit('node.started', {
-        activeCount: wave.length,
+        activeCount: boundWave.length,
         executorId: options.executor.id,
       }, identity);
       task.state.maxScheduledAttempt = task.attempt;
@@ -1589,7 +1908,7 @@ const executeParallelTasks = async (
     }
 
     const controller = new AbortController();
-    const requests = wave.map((task) => buildParallelRequest(
+    const requests = boundWave.map((task) => buildParallelRequest(
       task,
       inputArtifact,
       options.store.runId,
@@ -1623,8 +1942,8 @@ const executeParallelTasks = async (
     let blockedTask: ParallelTaskFailure | undefined;
     let cancelledTask: ParallelTaskFailure | undefined;
 
-    for (let index = 0; index < wave.length; index += 1) {
-      const task = wave[index] as ScheduledParallelTask;
+    for (let index = 0; index < boundWave.length; index += 1) {
+      const task = boundWave[index] as BoundParallelTask;
       const request = requests[index] as AgentExecutionRequest;
       const executorResult = waveResult.results[index] as AgentExecutionResult;
       const identity = parallelNodeIdentity(task, task.attempt);
@@ -1697,27 +2016,69 @@ const executeParallelTasks = async (
       }
 
       if (!failure) {
-        const artifact = options.store.writeJsonArtifact(output);
-        writer.emit('node.output-validated', {
-          artifact: artifactToJson(artifact),
-          findings: executorResult.findings.map((finding) => ({
-            code: finding.code,
-            message: finding.message,
-            severity: finding.severity,
-            ...(finding.path ? { path: finding.path } : {}),
-          })),
-        }, identity);
-        writer.emit('node.completed', {
-          artifact: artifactToJson(artifact),
-          reportedArtifacts: [...executorResult.artifacts],
-          usage: usageToJson(executorResult.usage),
-        }, identity);
-        task.state.artifact = artifact;
-        task.state.completed = true;
-        task.state.failed = false;
-        continue;
+        let artifact: ExecutionArtifactReference | undefined;
+        let change: ExecutionWorkspaceChange | undefined;
+        try {
+          artifact = options.store.writeJsonArtifact(output);
+          if (task.node.effect?.kind === 'repository-write') {
+            change = await options.workspace?.finalize({
+              binding: task.binding as ExecutionWorkspaceBinding,
+              effectId: task.effectId as string,
+              outputArtifact: artifact,
+            });
+            if (!change) {
+              throw new Error('Execution Workspace finalize 未返回 change');
+            }
+          }
+        } catch (error: unknown) {
+          failure = {
+            code: 'workspace-conflict',
+            message: errorMessage(error),
+            retryable: false,
+          };
+        }
+        if (artifact && !failure) {
+          writer.emit('node.output-validated', {
+            artifact: artifactToJson(artifact),
+            findings: executorResult.findings.map((finding) => ({
+              code: finding.code,
+              message: finding.message,
+              severity: finding.severity,
+              ...(finding.path ? { path: finding.path } : {}),
+            })),
+          }, identity);
+          if (task.node.effect && task.effectId) {
+            writer.emit('node.effect-confirmed', {
+              ...(change ? { change: workspaceChangeToJson(change) } : {}),
+              effectId: task.effectId,
+              kind: task.node.effect.kind,
+              outputArtifact: artifactToJson(artifact),
+              reportedArtifacts: [...executorResult.artifacts],
+              usage: usageToJson(executorResult.usage),
+            }, identity);
+          }
+          writer.emit('node.completed', {
+            artifact: artifactToJson(artifact),
+            reportedArtifacts: [...executorResult.artifacts],
+            usage: usageToJson(executorResult.usage),
+          }, identity);
+          task.state.artifact = artifact;
+          task.state.completed = true;
+          task.state.failed = false;
+          continue;
+        }
       }
 
+      if (!failure) {
+        throw new Error(`节点 ${task.node.id} 既未完成也未产生失败结果`);
+      }
+      if (task.node.effect) {
+        failure = {
+          code: failure.code,
+          message: failure.message,
+          retryable: false,
+        };
+      }
       const next = task.attempt + 1;
       const terminal = !failure.retryable || next > definition.limits.maxAttemptsPerNode;
       const isolated = terminal && task.node.failurePolicy === 'isolate';
@@ -1776,6 +2137,212 @@ const executeParallelTasks = async (
     }
     queue.push(...retries);
   }
+  return undefined;
+};
+
+const executeIntegratorNode = async (
+  node: IntegratorWorkflowNode,
+  state: NodeReplayState,
+  definition: WorkflowDefinition,
+  plan: StaticExecutionPlan,
+  options: ResolvedWritableExecutionOptions,
+  writer: EventWriter,
+): Promise<ExecutionRunResult | undefined> => {
+  if (state.completed) {
+    if (state.artifact) {
+      options.store.readJsonArtifact(state.artifact);
+    }
+    return undefined;
+  }
+  if (state.failed) {
+    return emitRunFailure(writer, definition, plan, options.store, {
+      code: state.error?.code === 'merge-conflict' ? 'merge-conflict' : 'verification-failed',
+      message: state.error?.message ?? `Integrator ${node.id} 已失败`,
+      nodeId: node.id,
+    });
+  }
+
+  const confirmed = [...writer.events].reverse().find((event) =>
+    event.type === 'node.effect-confirmed' && event.nodeId === node.id);
+  if (confirmed) {
+    const payload = objectValue(confirmed.payload, 'node.effect-confirmed.payload');
+    const artifact = artifactFromJson(
+      payload.outputArtifact,
+      'node.effect-confirmed.payload.outputArtifact',
+    );
+    options.store.readJsonArtifact(artifact);
+    const attempt = confirmed.attempt as number;
+    writer.emit('node.completed', {
+      artifact: artifactToJson(artifact),
+      recoveredEffect: effectIdFromEvent(confirmed),
+    }, { attempt, nodeId: node.id });
+    state.artifact = artifact;
+    state.completed = true;
+    state.failed = false;
+    return undefined;
+  }
+
+  const prepared = [...writer.events].reverse().find((event) =>
+    event.type === 'node.effect-prepared' && event.nodeId === node.id);
+  const attempt = prepared?.attempt ?? nextAttempt(state);
+  if (attempt > definition.limits.maxAttemptsPerNode) {
+    return emitRunFailure(writer, definition, plan, options.store, {
+      code: 'budget-exhausted',
+      message: `Integrator ${node.id} 已达到尝试次数上限`,
+      nodeId: node.id,
+    });
+  }
+  const effectId = prepared
+    ? effectIdFromEvent(prepared)
+    : `${options.store.runId}:${node.id}:${attempt}:integrate`;
+  let changes: ExecutionWorkspaceChange[];
+  try {
+    changes = dependencyWorkspaceChanges(node, writer.events);
+  } catch (error: unknown) {
+    return emitRunFailure(writer, definition, plan, options.store, {
+      code: 'journal-corrupt',
+      message: errorMessage(error),
+      nodeId: node.id,
+    });
+  }
+
+  const identity = { attempt, nodeId: node.id };
+  if (changes.length === 0) {
+    writer.emit('node.scheduled', { mode: 'integrator-noop' }, identity);
+    writer.emit('node.started', { mode: 'integrator-noop' }, identity);
+    const artifact = options.store.writeJsonArtifact({
+      changedPaths: [],
+      repository: node.repository,
+      status: 'no-changes',
+    });
+    writer.emit('node.output-validated', { artifact: artifactToJson(artifact) }, identity);
+    writer.emit('node.completed', { artifact: artifactToJson(artifact) }, identity);
+    state.maxScheduledAttempt = attempt;
+    state.maxStartedAttempt = attempt;
+    state.artifact = artifact;
+    state.completed = true;
+    state.failed = false;
+    return undefined;
+  }
+  writer.emit('node.scheduled', { mode: 'integrator' }, identity);
+  if (!prepared) {
+    writer.emit('node.effect-prepared', {
+      approvalCheckpoint: node.approvalCheckpoint,
+      effectId,
+      kind: 'repository-write',
+      resourceLocks: [`repository:${node.repository}`],
+    }, identity);
+  }
+  writer.emit('node.started', { workspaceServiceId: options.workspace.id }, identity);
+  state.maxScheduledAttempt = attempt;
+  state.maxStartedAttempt = attempt;
+
+  let integration;
+  try {
+    integration = await options.workspace.integrate({
+      approvalCheckpoint: node.approvalCheckpoint,
+      changes,
+      effectId,
+      nodeId: node.id,
+      repository: node.repository,
+      runId: options.store.runId,
+    });
+  } catch (error: unknown) {
+    writer.emit('node.failed', {
+      code: 'workspace-conflict',
+      message: errorMessage(error),
+      retryable: false,
+      terminal: true,
+    }, identity);
+    state.failed = true;
+    state.error = { code: 'workspace-conflict', message: errorMessage(error) };
+    return emitRunFailure(writer, definition, plan, options.store, {
+      code: 'node-failed',
+      message: errorMessage(error),
+      nodeId: node.id,
+    });
+  }
+
+  writer.emit('node.workspace-bound', {
+    baseCommit: integration.baseCommit,
+    bindingId: integration.bindingId,
+    repository: integration.repository,
+  }, identity);
+  if (integration.status === 'conflicted') {
+    const message = integration.conflicts.length > 0
+      ? `Integrator 检测到冲突：${integration.conflicts.join(', ')}`
+      : 'Integrator 检测到 Git 合并冲突';
+    writer.emit('node.failed', {
+      code: 'merge-conflict',
+      conflicts: [...integration.conflicts],
+      findings: integration.findings.map((finding) => ({ ...finding })),
+      message,
+      retryable: false,
+      terminal: true,
+    }, identity);
+    state.failed = true;
+    state.error = { code: 'merge-conflict', message };
+    return emitRunFailure(writer, definition, plan, options.store, {
+      code: 'merge-conflict',
+      message,
+      nodeId: node.id,
+    });
+  }
+  if (integration.status === 'failed') {
+    if (integration.findings.some(({ code }) => code === 'integration-recovery-required')) {
+      writer.emit('run.paused', {
+        effectId,
+        nodeId: node.id,
+        reason: 'effect-recovery-required',
+      });
+      return buildRunResult(definition, plan, options.store, writer.events, 'paused');
+    }
+    const message = integration.findings.find(({ severity }) => severity === 'error')?.message ??
+      'Integrator 合并后验证失败';
+    writer.emit('node.failed', {
+      code: 'verification-failed',
+      findings: integration.findings.map((finding) => ({ ...finding })),
+      message,
+      retryable: false,
+      terminal: true,
+    }, identity);
+    state.failed = true;
+    state.error = { code: 'verification-failed', message };
+    return emitRunFailure(writer, definition, plan, options.store, {
+      code: 'verification-failed',
+      message,
+      nodeId: node.id,
+    });
+  }
+  if (!integration.commit) {
+    throw new Error('Integrator succeeded 但缺少 commit');
+  }
+
+  const output: PluginJsonValue = {
+    baseCommit: integration.baseCommit,
+    bindingId: integration.bindingId,
+    changedPaths: [...integration.changedPaths],
+    commit: integration.commit,
+    conflicts: [...integration.conflicts],
+    findings: integration.findings.map((finding) => ({ ...finding })),
+    repository: integration.repository,
+    status: integration.status,
+  };
+  const artifact = options.store.writeJsonArtifact(output);
+  writer.emit('node.output-validated', {
+    artifact: artifactToJson(artifact),
+    findings: integration.findings.map((finding) => ({ ...finding })),
+  }, identity);
+  writer.emit('node.effect-confirmed', {
+    effectId,
+    integration: true,
+    kind: 'repository-write',
+    outputArtifact: artifactToJson(artifact),
+  }, identity);
+  writer.emit('node.completed', { artifact: artifactToJson(artifact) }, identity);
+  state.artifact = artifact;
+  state.completed = true;
+  state.failed = false;
   return undefined;
 };
 
@@ -1925,12 +2492,27 @@ const finalizeMapNode = (
 
 const runParallelWorkflowInternal = async (
   options: ParallelExecutionOptions,
+  executionMode: 'parallel-readonly' | 'writable-worktree',
 ): Promise<ExecutionRunResult> => {
   const plan = compileStaticExecutionPlan(options.definition);
   const definition = options.definition as WorkflowDefinition;
-  const policyFindings = phaseTwoPolicyFindings(definition);
+  const policyFindings = executionMode === 'writable-worktree'
+    ? phaseFourPolicyFindings(definition)
+    : phaseTwoPolicyFindings(definition);
   if (policyFindings.length > 0) {
-    throw new Error(`Phase 2 执行策略拒绝：\n- ${policyFindings.join('\n- ')}`);
+    const phase = executionMode === 'writable-worktree' ? 'Phase 4' : 'Phase 2';
+    throw new Error(`${phase} 执行策略拒绝：\n- ${policyFindings.join('\n- ')}`);
+  }
+  const requiresWorkspace = definition.nodes.some((node) =>
+    node.type === 'integrator' ||
+    ((node.type === 'agent' || node.type === 'map') &&
+      node.effect?.kind === 'repository-write'));
+  if (
+    executionMode === 'writable-worktree' &&
+    requiresWorkspace &&
+    !options.workspace
+  ) {
+    throw new Error('Phase 4 repository-write 必须提供 Execution Workspace Service');
   }
   if (definition.inputSchema !== undefined) {
     const inputFindings = validateJsonValue(definition.inputSchema, options.input);
@@ -1979,10 +2561,24 @@ const runParallelWorkflowInternal = async (
       effectiveConcurrency,
       executorMode: negotiation.mode,
       executorId: options.executor.id,
-      mode: 'parallel-readonly',
+      mode: executionMode,
       requestedConcurrency: definition.limits.maxConcurrency,
+      ...(requiresWorkspace && options.workspace
+        ? { workspaceServiceId: options.workspace.id }
+        : {}),
     });
   } else {
+    const startedEvent = existingEvents.find((event) => event.type === 'run.started');
+    const startedPayload = objectValue(startedEvent?.payload ?? {}, 'run.started.payload');
+    if (startedPayload.mode !== executionMode) {
+      throw new Error('Execution mode 与现有 Run 不匹配');
+    }
+    if (
+      requiresWorkspace &&
+      startedPayload.workspaceServiceId !== options.workspace?.id
+    ) {
+      throw new Error('Execution Workspace Service 与现有 Run 不匹配');
+    }
     const identity = runIdentityFromCreated(existingEvents[0] as ExecutionEvent);
     if (identity.inputHash !== inputHash) {
       throw new Error('Input hash 与现有 Run 不匹配，禁止复用');
@@ -2043,6 +2639,23 @@ const runParallelWorkflowInternal = async (
       if (node.type === 'agent' || node.type === 'map') {
         continue;
       }
+      if (node.type === 'integrator') {
+        if (executionMode !== 'writable-worktree' || !options.workspace) {
+          throw new Error('Phase 2 不支持 integrator 节点');
+        }
+        const result = await executeIntegratorNode(
+          node,
+          states.get(node.id) as NodeReplayState,
+          definition,
+          plan,
+          options as ResolvedWritableExecutionOptions,
+          writer,
+        );
+        if (result) {
+          return result;
+        }
+        continue;
+      }
       if (activeDurationMs(writer.events, now()) >= definition.limits.maxDurationMs) {
         return emitRunFailure(writer, definition, plan, options.store, {
           code: 'budget-exhausted',
@@ -2088,7 +2701,7 @@ const runParallelWorkflowInternal = async (
           nodeId: node.id,
         });
       }
-      if (node.type === 'map') {
+      if (node.type === 'map' && state.maxStartedAttempt === 0) {
         const parentAttempt = nextAttempt(state);
         if (parentAttempt > definition.limits.maxAttemptsPerNode) {
           return emitRunFailure(writer, definition, plan, options.store, {
@@ -2270,7 +2883,21 @@ export const runParallelWorkflow = async (
   options: ParallelExecutionOptions,
 ): Promise<ExecutionRunResult> => {
   try {
-    return await runParallelWorkflowInternal(options);
+    return await runParallelWorkflowInternal(options, 'parallel-readonly');
+  } catch (error: unknown) {
+    if (!(error instanceof ExecutionControlChangedError)) {
+      throw error;
+    }
+    return buildControlledRunResult(options, error.status);
+  }
+};
+
+/** Executes Phase 4 workflows with isolated writable worktrees and explicit integration. */
+export const runWritableWorkflow = async (
+  options: WritableExecutionOptions,
+): Promise<ExecutionRunResult> => {
+  try {
+    return await runParallelWorkflowInternal(options, 'writable-worktree');
   } catch (error: unknown) {
     if (!(error instanceof ExecutionControlChangedError)) {
       throw error;

@@ -35,6 +35,7 @@ export const main = (): number => {
     assert.match(help.stdout, /\n  execution:run\n/);
     assert.match(help.stdout, /\n  execution:parallel:run\n/);
     assert.match(help.stdout, /\n  execution:portability:test\n/);
+    assert.match(help.stdout, /\n  execution:writable:test\n/);
     assert.match(help.stdout, /quality:policy/);
 
     const standalonePlanHelp = runCli(['execution:plan', '--help'], tmpdir());

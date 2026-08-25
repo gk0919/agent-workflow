@@ -8,7 +8,10 @@ import type {
   SourceProviderService,
   ValidatorService,
 } from '../contracts/capabilities.js';
-import type { AgentExecutorService } from '../contracts/execution.js';
+import type {
+  AgentExecutorService,
+  ExecutionWorkspaceService,
+} from '../contracts/execution.js';
 import type {
   PluginPermission,
   ServiceDefinition,
@@ -61,6 +64,10 @@ export const agentAdapterService = defineService<AgentAdapterService>(
 export const agentExecutorService = defineService<AgentExecutorService>(
   STANDARD_PLUGIN_SERVICES['agent-executor'],
   { multiple: true },
+);
+export const executionWorkspaceService = defineService<ExecutionWorkspaceService>(
+  STANDARD_PLUGIN_SERVICES['execution-workspace'],
+  { multiple: true, permission: 'workspace:write' },
 );
 export const contextProviderService = defineService<ContextProviderService>(
   STANDARD_PLUGIN_SERVICES['context-provider'],

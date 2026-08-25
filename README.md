@@ -225,6 +225,7 @@ agent-workflow quality:skills
 agent-workflow quality:workflow
 agent-workflow quality:tasks
 agent-workflow cli:test
+agent-workflow execution:writable:test
 agent-workflow context
 agent-workflow routes:eval
 agent-workflow routes:prompt-eval --check-suite

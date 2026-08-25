@@ -35,6 +35,7 @@ const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'execution:parallel:resume': command('dist/src/execution/cli.js', ['resume', '--scheduler', 'parallel']),
   'execution:parallel:test': command('dist/tests/contract/parallel-runner-regression.js'),
   'execution:portability:test': command('dist/tests/contract/executor-portability-regression.js'),
+  'execution:writable:test': command('dist/tests/contract/writable-workspace-regression.js'),
   'execution:runner:test': command('dist/tests/contract/serial-runner-regression.js'),
   'execution:test': command('dist/tests/contract/execution-plan-regression.js'),
   init: command('dist/src/cli/init.js'),

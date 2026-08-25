@@ -270,6 +270,7 @@ export const validateJsonValue = (
 
 const semanticFindings = (definition: WorkflowDefinition): string[] => {
   const findings: string[] = [];
+  const repositoryPathPattern = /^(?:\.|[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*)$/;
   const nodesById = new Map<string, WorkflowNode>();
   const duplicateIds = new Set<string>();
 
@@ -296,6 +297,37 @@ const semanticFindings = (definition: WorkflowDefinition): string[] => {
   if (agentUpperBound > definition.limits.maxAgents) {
     findings.push(`$.limits.maxAgents: Agent 节点超过上限（调用上界 ${agentUpperBound}）`);
   }
+  const writeEffectUpperBound = definition.nodes.reduce((total, node) => {
+    if (node.type === 'integrator') {
+      return total + 1;
+    }
+    if ((node.type === 'agent' || node.type === 'map') && node.effect) {
+      return total + (node.type === 'map' ? node.maxItems : 1);
+    }
+    return total;
+  }, 0);
+  if (writeEffectUpperBound > definition.limits.maxExternalWrites) {
+    findings.push(
+      `$.limits.maxExternalWrites: 写入 effect 超过上限（调用上界 ${writeEffectUpperBound}）`,
+    );
+  }
+
+  const hasAncestor = (node: WorkflowNode, ancestorId: string): boolean => {
+    const pending = [...(node.dependsOn ?? [])];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const id = pending.pop();
+      if (!id || visited.has(id)) {
+        continue;
+      }
+      if (id === ancestorId) {
+        return true;
+      }
+      visited.add(id);
+      pending.push(...(nodesById.get(id)?.dependsOn ?? []));
+    }
+    return false;
+  };
 
   const dependents = new Map<string, Set<string>>(
     [...nodesById.keys()].map((id) => [id, new Set<string>()]),
@@ -323,6 +355,84 @@ const semanticFindings = (definition: WorkflowDefinition): string[] => {
       }
       if (node.outputSchema !== undefined) {
         findings.push(...validateEmbeddedSchema(node.outputSchema, `$.nodes/${node.id}/outputSchema`));
+      }
+      if (node.effect) {
+        const templatedValues = [
+          ...(node.effect.ownedPaths ?? []),
+          ...(node.effect.resourceLocks ?? []),
+        ];
+        if (templatedValues.some((value) => value.replaceAll('{lane}', '').includes('{') ||
+          value.replaceAll('{lane}', '').includes('}'))) {
+          findings.push(`$.nodes/${node.id}/effect: 只支持 {lane} 模板变量`);
+        }
+        if (node.type === 'agent' && templatedValues.some((value) => value.includes('{lane}'))) {
+          findings.push(`$.nodes/${node.id}/effect: agent 节点不能使用 {lane}`);
+        }
+        const checkpoint = nodesById.get(node.effect.approvalCheckpoint);
+        if (checkpoint?.type !== 'checkpoint') {
+          findings.push(
+            `$.nodes/${node.id}/effect/approvalCheckpoint: 必须引用 checkpoint 节点`,
+          );
+        } else if (!hasAncestor(node, checkpoint.id)) {
+          findings.push(
+            `$.nodes/${node.id}/effect/approvalCheckpoint: checkpoint 必须是写节点祖先`,
+          );
+        }
+        if (node.effect.kind === 'repository-write') {
+          if (!(node.effect.ownedPaths?.length)) {
+            findings.push(`$.nodes/${node.id}/effect/ownedPaths: 仓库写入必须声明 ownership`);
+          }
+          if (
+            node.workspace?.mode !== 'exclusive-worktree' ||
+            !node.workspace.repository
+          ) {
+            findings.push(
+              `$.nodes/${node.id}/workspace: 仓库写入必须声明 repository 和 exclusive-worktree`,
+            );
+          } else if (!repositoryPathPattern.test(node.workspace.repository)) {
+            findings.push(`$.nodes/${node.id}/workspace/repository: 必须是规范工作区相对路径`);
+          }
+          if (!(node.permissions ?? []).includes('workspace:write')) {
+            findings.push(`$.nodes/${node.id}/permissions: 仓库写入必须声明 workspace:write`);
+          }
+        } else if (node.effect.ownedPaths !== undefined) {
+          findings.push(`$.nodes/${node.id}/effect/ownedPaths: 外部写入不能声明仓库 ownership`);
+        }
+      } else if ((node.permissions ?? []).includes('workspace:write')) {
+        findings.push(`$.nodes/${node.id}/permissions: workspace:write 必须绑定 repository-write effect`);
+      }
+    }
+    if (
+      (node.type === 'agent' || node.type === 'map') &&
+      node.effect?.kind === 'repository-write'
+    ) {
+      const integrators = definition.nodes.filter((candidate) =>
+        candidate.type === 'integrator' && candidate.dependsOn.includes(node.id));
+      if (integrators.length !== 1) {
+        findings.push(
+          `$.nodes/${node.id}: repository-write 必须由且仅由一个直接 Integrator 消费`,
+        );
+      }
+    }
+    if (node.type === 'integrator') {
+      const checkpoint = nodesById.get(node.approvalCheckpoint);
+      if (checkpoint?.type !== 'checkpoint' || !hasAncestor(node, node.approvalCheckpoint)) {
+        findings.push(
+          `$.nodes/${node.id}/approvalCheckpoint: 必须引用上游 checkpoint 节点`,
+        );
+      }
+      for (const dependencyId of node.dependsOn) {
+        const dependency = nodesById.get(dependencyId);
+        if (
+          !dependency ||
+          (dependency.type !== 'agent' && dependency.type !== 'map') ||
+          dependency.effect?.kind !== 'repository-write' ||
+          dependency.workspace?.repository !== node.repository
+        ) {
+          findings.push(
+            `$.nodes/${node.id}/dependsOn: Integrator 只能直接依赖同仓库 repository-write 节点：${dependencyId}`,
+          );
+        }
       }
     }
     if (node.type === 'parallel') {

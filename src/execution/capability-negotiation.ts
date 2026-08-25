@@ -69,6 +69,15 @@ export const negotiateExecutorCapabilities = (
     if (missingRequired.length > 0) {
       errors.push(`节点 ${node.id} 缺少 required capability：${missingRequired.join(', ')}`);
     }
+    if (node.effect && !supported.has('tool-allowlist')) {
+      errors.push(`节点 ${node.id} 的写入 effect 要求 tool-allowlist capability`);
+    }
+    if (
+      node.effect?.kind === 'repository-write' &&
+      !supported.has('workspace-isolation')
+    ) {
+      errors.push(`节点 ${node.id} 的仓库写入要求 workspace-isolation capability`);
+    }
     degradedCapabilities.push(...(node.preferredCapabilities ?? [])
       .filter((capability) => !supported.has(capability))
       .map((capability) => `${node.id}:${capability}`));

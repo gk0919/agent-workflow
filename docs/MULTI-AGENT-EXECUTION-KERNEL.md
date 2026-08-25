@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Phase 0、Phase 1、Phase 2、Phase 3 已实现；Phase 4 及以后仍为 Proposed |
+| 状态 | Phase 0、Phase 1、Phase 2、Phase 3、Phase 4 已实现；Phase 5 仍为 Proposed |
 | 最近评审 | 2026-08-25 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
@@ -22,7 +22,7 @@
 3. 新增可选 Execution Kernel，负责调度、并发、检查点、恢复、取消和预算。
 4. 通过公共 Agent Executor 契约接入不同宿主或模型，不在 Core 中绑定具体产品。
 5. 所有不可信 Workflow、输入、Agent 输出和持久化事件先做结构校验，再做语义与安全校验。
-6. Phase 1 基线只支持串行、只读和可恢复执行；Phase 2 已开放有界只读并行，写入并行和脚本外观仍按后续阶段开放。
+6. Phase 1 基线只支持串行、只读和可恢复执行；Phase 2 已开放有界只读并行；Phase 4 只通过显式 effect、Approval 和隔离 Worktree 开放写入并行，脚本外观仍按后续阶段开放。
 
 不采用的目标方案是：直接在主 Node 进程中加载或执行模型生成的任意 JavaScript。若未来提供 TypeScript/JavaScript 作者体验，它只能生成声明式 IR，不能成为受信任执行边界。
 
@@ -46,7 +46,8 @@
 现有系统已经具备多 Agent 内核的控制面基础。Phase 0 已增加公共执行契约与静态编译器，
 Phase 1 已增加确定性串行 Runner、File Journal、内容寻址 Artifact 和 Fake Executor；
 Phase 2 已增加稳定批次的只读并行调度、动态 map lane、失败隔离和确定性归约；
-Phase 3 已增加原生宿主 Adapter、独立进程 Executor、能力协商和串行降级。
+Phase 3 已增加原生宿主 Adapter、独立进程 Executor、能力协商和串行降级；
+Phase 4 已增加写入 effect、Run/Node/Lane Worktree binding、Integrator 和副作用恢复协议。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
@@ -520,10 +521,11 @@ discover changed files
   同时覆盖无效结构化输出、降级拒绝、无效 JSON 和响应身份不匹配。
 
 上述退出标准已满足。具体宿主接入与 conformance 要求见
-[`EXECUTOR-PORTABILITY.md`](./EXECUTOR-PORTABILITY.md)。Phase 4 之前仍只允许共享只读 Workspace，
-不得借 Adapter 绕过 `maxExternalWrites: 0`、权限交集或外部写入 Approval。
+[`EXECUTOR-PORTABILITY.md`](./EXECUTOR-PORTABILITY.md)。Phase 3 的 `runPortableWorkflow` 入口仍只允许
+共享只读 Workspace，不得借 Adapter 绕过权限交集或外部写入 Approval；可写执行必须显式使用
+Phase 4 的 `runWritableWorkflow` 和 `ExecutionWorkspaceService`。
 
-### Phase 4：写入 Agent 与 Worktree
+### Phase 4：写入 Agent 与 Worktree（已完成）
 
 交付：
 
@@ -535,6 +537,33 @@ discover changed files
 - 外部写入 Approval Checkpoint
 
 退出标准：并行 lane 不共享可写工作树；冲突不会静默覆盖；恢复不会重复已确认的外部副作用。
+
+当前实现（2026-08-25）：
+
+- Workflow Definition 新增版本 1 的 `effect` 和 `integrator` 向后兼容字段。静态编译器验证 Approval
+  祖先、repository、`exclusive-worktree`、`workspace:write`、精确 ownership、Integrator 依赖和
+  写入调用上界；旧 Definition 不需要迁移，旧 Runner 继续显式拒绝写入语义。
+- `runWritableWorkflow` 使用现有 DAG、Journal、Artifact、预算、Checkpoint 和 capability negotiation；
+  写节点必须获得 tool allowlist，repository 写入还必须获得 workspace isolation 能力。
+- `GitWorktreeWorkspaceService` 将 Run/Node/Lane 绑定到共同 base commit 上的独立 detached
+  worktree。Executor 的 host-local root 不进入 Portable Event/Artifact；runtime state 使用独立的
+  `./schemas/execution-workspace-state.json` 版本 1 Schema。
+- repository effect 在执行前写入 stable `effect-prepared`，成功输出经过 ownership、ignored file、
+  `git diff --check` 后形成本地 commit，再写 `effect-confirmed`。崩溃后只恢复可唯一证明的 commit；
+  状态不明确时暂停，不重复执行。
+- external effect 在 prepared/confirmed 之间崩溃时一律暂停人工核对；confirmed 后崩溃只补写节点
+  completed，不再次调用 Executor。
+- 调度器按物化后的 resource lock 生成无冲突 wave；Map 的 `{lane}` 同时作用于 ownership 和锁，
+  不同 lane 使用不同 binding/root。
+- Integrator 在独立 worktree 中先拒绝 changed-path ownership 碰撞，再按稳定 binding 顺序执行
+  `cherry-pick --no-commit`。Git 冲突返回 `merge-conflict`，不会写主工作树或静默选边。
+- 合并结果必须经过 `git diff --cached --check` 和宿主只读 Verifier。Verifier error、异常或修改
+  workspace 都阻止 integration commit，并返回 `verification-failed`。
+- `execution:writable:test` 在临时真实 Git 仓库覆盖隔离、并发锁、ownership 越界、冲突、验证失败、
+  repository commit 恢复，以及 external effect 的 confirmed/unconfirmed 崩溃窗口。
+
+上述退出标准已满足。公共接入、Definition 约束、恢复矩阵和宿主安全边界见
+[`WRITABLE-EXECUTION.md`](./WRITABLE-EXECUTION.md)。
 
 ### Phase 5：动态作者体验
 

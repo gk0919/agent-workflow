@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-workflow.local/schemas/workflow-definition.schema.json",
   "title": "Portable Multi-Agent Workflow Definition",
-  "description": "Portable declarative workflow graph for deterministic serial and read-only parallel execution.",
+  "description": "Portable declarative workflow graph for deterministic, bounded and recoverable execution.",
   "type": "object",
   "required": ["schemaVersion", "id", "limits", "nodes", "resultNode"],
   "properties": {
@@ -21,6 +21,7 @@
           {"$ref": "#/$defs/agentNode"},
           {"$ref": "#/$defs/checkpointNode"},
           {"$ref": "#/$defs/gateNode"},
+          {"$ref": "#/$defs/integratorNode"},
           {"$ref": "#/$defs/joinNode"},
           {"$ref": "#/$defs/mapNode"},
           {"$ref": "#/$defs/parallelNode"},
@@ -109,7 +110,7 @@
       "required": ["id", "type"],
       "properties": {
         "id": {"$ref": "#/$defs/identifier"},
-        "type": {"enum": ["agent", "checkpoint", "gate", "join", "map", "parallel", "reduce"]},
+        "type": {"enum": ["agent", "checkpoint", "gate", "integrator", "join", "map", "parallel", "reduce"]},
         "label": {"type": "string", "minLength": 1, "maxLength": 200},
         "dependsOn": {"$ref": "#/$defs/dependencyList"}
       }
@@ -123,6 +124,47 @@
       },
       "additionalProperties": false
     },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?:\\.|[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*)$"
+    },
+    "ownedPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[A-Za-z0-9._{}-]+(?:/[A-Za-z0-9._{}-]+)*$"
+    },
+    "resourceKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[A-Za-z0-9._{}:@#/-]+$"
+    },
+    "effect": {
+      "type": "object",
+      "required": ["kind", "approvalCheckpoint"],
+      "properties": {
+        "kind": {"enum": ["repository-write", "external-write"]},
+        "approvalCheckpoint": {"$ref": "#/$defs/identifier"},
+        "ownedPaths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/ownedPath"}
+        },
+        "resourceLocks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/resourceKey"}
+        }
+      },
+      "additionalProperties": false
+    },
     "agentNode": {
       "type": "object",
       "allOf": [
@@ -132,6 +174,7 @@
           "required": ["prompt"],
           "properties": {
             "type": {"const": "agent"},
+            "effect": {"$ref": "#/$defs/effect"},
             "failurePolicy": {"enum": ["fail-fast", "isolate"]},
             "prompt": {"type": "string", "minLength": 1, "maxLength": 20000},
             "outputSchema": {"$ref": "#/$defs/schemaValue"},
@@ -191,6 +234,23 @@
       ],
       "unevaluatedProperties": false
     },
+    "integratorNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["approvalCheckpoint", "dependsOn", "repository"],
+          "properties": {
+            "type": {"const": "integrator"},
+            "approvalCheckpoint": {"$ref": "#/$defs/identifier"},
+            "dependsOn": {"$ref": "#/$defs/nonEmptyDependencyList"},
+            "repository": {"$ref": "#/$defs/repositoryPath"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
     "mapNode": {
       "type": "object",
       "allOf": [
@@ -200,6 +260,7 @@
           "required": ["dependsOn", "maxItems", "prompt"],
           "properties": {
             "type": {"const": "map"},
+            "effect": {"$ref": "#/$defs/effect"},
             "dependsOn": {"$ref": "#/$defs/singleDependencyList"},
             "failurePolicy": {"enum": ["fail-fast", "isolate"]},
             "itemsPointer": {"$ref": "#/$defs/jsonPointer"},

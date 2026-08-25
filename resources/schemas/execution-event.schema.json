@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-workflow.local/schemas/execution-event.schema.json",
   "title": "Multi-Agent Execution Journal Event",
-  "description": "Versioned append-only event envelope for serial and read-only parallel execution.",
+  "description": "Versioned append-only event envelope for bounded and recoverable execution.",
   "type": "object",
   "required": [
     "schemaVersion",
@@ -53,7 +53,10 @@
         "run.started",
         "node.scheduled",
         "node.started",
+        "node.workspace-bound",
+        "node.effect-prepared",
         "node.output-validated",
+        "node.effect-confirmed",
         "node.completed",
         "node.failed",
         "node.retry-scheduled",
@@ -91,7 +94,10 @@
             "enum": [
               "node.scheduled",
               "node.started",
+              "node.workspace-bound",
+              "node.effect-prepared",
               "node.output-validated",
+              "node.effect-confirmed",
               "node.completed",
               "node.failed",
               "node.retry-scheduled"

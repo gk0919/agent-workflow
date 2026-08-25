@@ -14,6 +14,7 @@ export const WORKFLOW_NODE_TYPES = [
   'agent',
   'checkpoint',
   'gate',
+  'integrator',
   'join',
   'map',
   'parallel',
@@ -26,7 +27,10 @@ export const EXECUTION_EVENT_TYPES = [
   'run.started',
   'node.scheduled',
   'node.started',
+  'node.workspace-bound',
+  'node.effect-prepared',
   'node.output-validated',
+  'node.effect-confirmed',
   'node.completed',
   'node.failed',
   'node.retry-scheduled',
@@ -66,6 +70,7 @@ export interface WorkflowWorkspaceRequirement {
 }
 
 export interface AgentWorkflowNode extends WorkflowNodeBase {
+  readonly effect?: WorkflowEffectRequirement;
   readonly failurePolicy?: WorkflowFailurePolicy;
   readonly outputSchema?: PortableJsonSchema;
   readonly permissions?: readonly PluginPermission[];
@@ -78,8 +83,18 @@ export interface AgentWorkflowNode extends WorkflowNodeBase {
 
 export type WorkflowFailurePolicy = 'fail-fast' | 'isolate';
 
+export type WorkflowEffectKind = 'external-write' | 'repository-write';
+
+export interface WorkflowEffectRequirement {
+  readonly approvalCheckpoint: string;
+  readonly kind: WorkflowEffectKind;
+  readonly ownedPaths?: readonly string[];
+  readonly resourceLocks?: readonly string[];
+}
+
 export interface MapWorkflowNode extends WorkflowNodeBase {
   readonly dependsOn: readonly [string];
+  readonly effect?: WorkflowEffectRequirement;
   readonly failurePolicy?: WorkflowFailurePolicy;
   readonly itemsPointer?: string;
   readonly maxItems: number;
@@ -115,6 +130,13 @@ export interface JoinWorkflowNode extends WorkflowNodeBase {
   readonly type: 'join';
 }
 
+export interface IntegratorWorkflowNode extends WorkflowNodeBase {
+  readonly approvalCheckpoint: string;
+  readonly dependsOn: readonly string[];
+  readonly repository: string;
+  readonly type: 'integrator';
+}
+
 export type WorkflowGateCondition = 'all-completed' | 'all-succeeded';
 
 export interface GateWorkflowNode extends WorkflowNodeBase {
@@ -133,6 +155,7 @@ export type WorkflowNode =
   | AgentWorkflowNode
   | CheckpointWorkflowNode
   | GateWorkflowNode
+  | IntegratorWorkflowNode
   | JoinWorkflowNode
   | MapWorkflowNode
   | ParallelWorkflowNode
@@ -202,9 +225,11 @@ export interface AgentExecutionLane {
 }
 
 export interface AgentExecutionWorkspace {
+  readonly baseCommit?: string;
   readonly bindingId?: string;
   readonly mode: WorkspaceMode;
   readonly repository?: string;
+  readonly rootPath?: string;
 }
 
 export interface AgentExecutionRequest {
@@ -283,6 +308,92 @@ export interface AgentExecutorService extends NamedPluginService {
   execute(request: AgentExecutionRequest): Promise<AgentExecutionResult>;
 }
 
+export interface ExecutionWorkspaceBinding {
+  readonly baseCommit: string;
+  readonly bindingId: string;
+  readonly nodeId: string;
+  readonly laneId?: string;
+  readonly ownedPaths: readonly string[];
+  readonly repository: string;
+  /** Host-local path; never persist it in portable Events or Artifacts. */
+  readonly rootPath: string;
+}
+
+export interface ExecutionWorkspaceBindRequest {
+  readonly laneId?: string;
+  readonly nodeId: string;
+  readonly ownedPaths: readonly string[];
+  readonly purpose: 'agent' | 'integrator';
+  readonly repository: string;
+  readonly runId: string;
+}
+
+export interface ExecutionWorkspaceChange {
+  readonly baseCommit: string;
+  readonly bindingId: string;
+  readonly changedPaths: readonly string[];
+  readonly commit: string;
+  readonly effectId: string;
+  readonly outputArtifact: ExecutionArtifactReference;
+  readonly ownedPaths: readonly string[];
+  readonly repository: string;
+}
+
+export interface ExecutionWorkspaceFinalizeRequest {
+  readonly binding: ExecutionWorkspaceBinding;
+  readonly effectId: string;
+  readonly outputArtifact: ExecutionArtifactReference;
+}
+
+export interface ExecutionWorkspaceRecoveryRequest {
+  readonly binding: ExecutionWorkspaceBinding;
+  readonly effectId: string;
+}
+
+export type ExecutionWorkspaceRecoveryStatus = 'ambiguous' | 'ready' | 'recovered';
+
+export interface ExecutionWorkspaceRecoveryResult {
+  readonly change?: ExecutionWorkspaceChange;
+  readonly message?: string;
+  readonly status: ExecutionWorkspaceRecoveryStatus;
+}
+
+export interface ExecutionIntegrationFinding {
+  readonly code: string;
+  readonly message: string;
+  readonly severity: 'error' | 'info' | 'warning';
+}
+
+export interface ExecutionIntegrationRequest {
+  readonly approvalCheckpoint: string;
+  readonly changes: readonly ExecutionWorkspaceChange[];
+  readonly effectId: string;
+  readonly nodeId: string;
+  readonly repository: string;
+  readonly runId: string;
+}
+
+export type ExecutionIntegrationStatus = 'conflicted' | 'failed' | 'succeeded';
+
+export interface ExecutionIntegrationResult {
+  readonly baseCommit: string;
+  readonly bindingId: string;
+  readonly changedPaths: readonly string[];
+  readonly commit?: string;
+  readonly conflicts: readonly string[];
+  readonly findings: readonly ExecutionIntegrationFinding[];
+  readonly repository: string;
+  readonly status: ExecutionIntegrationStatus;
+}
+
+/** Host-owned Git/workspace effects; Kernel remains filesystem and shell agnostic. */
+export interface ExecutionWorkspaceService extends NamedPluginService {
+  bind(request: ExecutionWorkspaceBindRequest): Promise<ExecutionWorkspaceBinding>;
+  finalize(request: ExecutionWorkspaceFinalizeRequest): Promise<ExecutionWorkspaceChange>;
+  integrate(request: ExecutionIntegrationRequest): Promise<ExecutionIntegrationResult>;
+  recover(request: ExecutionWorkspaceRecoveryRequest): Promise<ExecutionWorkspaceRecoveryResult>;
+}
+
 export interface StaticExecutionPlanNode {
   readonly dependents: readonly string[];
   readonly dependsOn: readonly string[];
@@ -316,10 +427,13 @@ export type ExecutionRunErrorCode =
   | 'definition-mismatch'
   | 'executor-blocked'
   | 'executor-incompatible'
+  | 'effect-recovery-required'
   | 'input-invalid'
   | 'journal-corrupt'
+  | 'merge-conflict'
   | 'node-failed'
-  | 'paused';
+  | 'paused'
+  | 'verification-failed';
 
 export interface ExecutionRunError {
   readonly code: ExecutionRunErrorCode;
