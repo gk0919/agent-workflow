@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -9,8 +10,8 @@ import { errorMessage } from '../../src/types/guards.js';
 
 const cliPath = path.join(workflowRoot, 'dist', 'bin', 'agent-workflow.js');
 
-const runCli = (args: string[]) => spawnSync(process.execPath, [cliPath, ...args], {
-  cwd: workspaceRoot,
+const runCli = (args: string[], cwd = workspaceRoot) => spawnSync(process.execPath, [cliPath, ...args], {
+  cwd,
   encoding: 'utf8',
   env: process.env,
   windowsHide: true,
@@ -30,7 +31,12 @@ export const main = (): number => {
     assert.equal(help.status, 0);
     assert.match(help.stdout, /Usage: agent-workflow <command>/);
     assert.match(help.stdout, /\n  init\n/);
+    assert.match(help.stdout, /\n  execution:plan\n/);
     assert.match(help.stdout, /quality:policy/);
+
+    const standalonePlanHelp = runCli(['execution:plan', '--help'], tmpdir());
+    assert.equal(standalonePlanHelp.status, 0, standalonePlanHelp.stderr);
+    assert.match(standalonePlanHelp.stdout, /workspace-relative-json/);
 
     const unknown = runCli(['unknown-command']);
     assert.equal(unknown.status, 1);

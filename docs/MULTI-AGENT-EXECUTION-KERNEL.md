@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Proposed，尚未实现 |
+| 状态 | Phase 0 已实现；Phase 1 及以后仍为 Proposed |
 | 最近评审 | 2026-08-25 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
@@ -43,15 +43,16 @@
 
 ## 当前基础与缺口
 
-现有系统已经具备多 Agent 内核的控制面基础，但尚无通用执行器。
+现有系统已经具备多 Agent 内核的控制面基础。Phase 0 已增加公共执行契约与静态编译器，
+但尚无通用 Runner 或真实 Executor 实现。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
 | Route / Profile | 选择路径、阶段和策略 | 阶段内部 Execution Graph |
 | Route Packet | 构造受预算控制的上下文 | 节点级 Context Snapshot 与引用 |
 | Task Lifecycle | `pending`、`blocked`、`resume`、`complete` | Run、Node、Attempt 级状态 |
-| Plugin Runtime | 服务注册、依赖、权限和回滚 | Agent Executor 标准服务 |
-| Validator Service | 领域校验扩展点 | Workflow/Input/Output 结构校验层 |
+| Plugin Runtime | 服务注册、依赖、权限和回滚；已注册 Agent Executor 标准服务 ID | Executor 实现与 capability negotiation |
+| Validator Service | 领域校验扩展点；已实现 Workflow/Event Ajv 结构校验和 DAG 语义校验 | 运行输入、节点输出和持久化状态校验 |
 | Approval Provider | 人工决策入口 | Run/Node Checkpoint 绑定与重放保护 |
 | Artifact Store | 保存内容与元数据 | 节点输出、检查点和内容寻址约定 |
 | Reporter | 外部报告扩展点 | 标准执行事件和使用量事件 |
@@ -242,7 +243,10 @@ run.completed
 
 ## Schema 与校验策略
 
-执行内核会显著增加运行时 JSON 信任边界，因此建议把 JSON Schema 保持为公共事实源，并以 Draft 2020-12 Validator 承担结构层。首选实现候选是 Ajv 2020；正式引入前仍需通过依赖、启动时间、错误适配和 Schema 一致性试点。
+执行内核会显著增加运行时 JSON 信任边界，因此保持 JSON Schema 为公共事实源，并以
+Draft 2020-12 Validator 承担结构层。Phase 0 已将 Ajv 2020 与 `ajv-formats` 声明为直接
+运行时依赖，使用 strict、无 coercion、无 defaults、无字段移除的配置，并把错误适配为
+稳定的公共文本。后续阶段仍需持续检查依赖体积、启动时间和 Schema 一致性。
 
 需要校验的对象包括：
 
@@ -377,7 +381,7 @@ Reporter 应能观察：
 
 ## 分阶段路线图
 
-### Phase 0：架构与契约
+### Phase 0：架构与契约（已完成）
 
 交付：
 
@@ -389,6 +393,20 @@ Reporter 应能观察：
 - Fake Executor 与 conformance fixture 设计
 
 退出标准：不调用真实模型，也能验证 Workflow、拒绝非法图并生成稳定的静态执行计划。
+
+当前实现（2026-08-25）：
+
+- `./execution` 公共导出提供 Workflow、Execution Event、Agent Executor 和静态计划契约。
+- `./schemas/workflow-definition.json` 与 `./schemas/execution-event.json` 提供版本化
+  Draft 2020-12 Schema。
+- `agent-workflow execution:plan --file <path>` 对工作区内显式文件执行结构和语义校验，
+  拒绝重复/缺失/自依赖、环、死节点、非终端结果、超预算和非本地 `$ref`，并生成按节点
+  ID 稳定排序的 DAG layers 与 SHA-256 Workflow hash。
+- Phase 0 只声明 `agent`、`join`、`gate`、`checkpoint`；不执行模型、不写 Journal、
+  不调度并发，也不创建 Worktree lane。
+- `execution:test` 与策略门禁覆盖确定性、非法图、事件约束、公共 CLI 和包导出。
+
+上述退出标准已满足；Fake Executor 的可执行 conformance fixture 随 Phase 1 Runner 落地。
 
 ### Phase 1：确定性串行 Runner
 

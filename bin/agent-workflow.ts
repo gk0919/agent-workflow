@@ -26,6 +26,8 @@ const command = (script: string, prefixArguments: string[] = []): CommandTarget 
 });
 const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'cli:test': command('dist/tests/contract/cli-regression.js'),
+  'execution:plan': command('dist/src/core/execution-plan.js'),
+  'execution:test': command('dist/tests/contract/execution-plan-regression.js'),
   init: command('dist/src/cli/init.js'),
   'init:test': command('dist/tests/contract/init-regression.js'),
   setup: command('dist/src/cli/setup.js'),
@@ -135,8 +137,9 @@ const main = async (): Promise<number> => {
   };
 
   // Init precedes workspace configuration; setup and plugin checks own their lifecycle.
+  // Static planning must not activate plugins or any plugin-provided side effects.
   if (commandName === 'init' || commandName === 'setup' || commandName === 'source:capture' ||
-      commandName.startsWith('plugins:')) {
+      commandName === 'execution:plan' || commandName.startsWith('plugins:')) {
     return runCommand();
   }
   try {

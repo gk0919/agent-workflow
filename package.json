@@ -14,6 +14,10 @@
       "types": "./dist/src/contracts/index.d.ts",
       "import": "./dist/src/contracts/index.js"
     },
+    "./execution": {
+      "types": "./dist/src/execution/index.d.ts",
+      "import": "./dist/src/execution/index.js"
+    },
     "./plugin-sdk": {
       "types": "./dist/src/plugin-sdk/index.d.ts",
       "import": "./dist/src/plugin-sdk/index.js"
@@ -36,6 +40,8 @@
     },
     "./plugins/mcp-source-provider/config.example.json": "./resources/plugins/mcp-source-provider/config.example.json",
     "./schemas/plugin-manifest.json": "./resources/schemas/plugin-manifest.schema.json",
+    "./schemas/execution-event.json": "./resources/schemas/execution-event.schema.json",
+    "./schemas/workflow-definition.json": "./resources/schemas/workflow-definition.schema.json",
     "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
     "./package.json": "./package.json"
   },
@@ -52,6 +58,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "workflow:classify": "node dist/bin/agent-workflow.js classify",
     "workflow:context": "node dist/bin/agent-workflow.js context",
+    "workflow:execution:plan": "node dist/bin/agent-workflow.js execution:plan",
     "workflow:feedback": "node dist/bin/agent-workflow.js feedback",
     "workflow:init": "node dist/bin/agent-workflow.js init",
     "workflow:init:test": "node dist/bin/agent-workflow.js init:test",
@@ -112,5 +119,9 @@
     "@modelcontextprotocol/client": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
   }
 }

@@ -20,6 +20,7 @@
         "enum": [
           "source-provider",
           "agent-adapter",
+          "agent-executor",
           "context-provider",
           "validator",
           "route-extension",

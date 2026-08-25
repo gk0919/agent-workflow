@@ -14,6 +14,7 @@ import {
   WorkflowPluginRuntime,
 } from '../../src/host-node/index.js';
 import {
+  agentExecutorService,
   definePlugin,
   defineService,
   sourceProviderService,
@@ -320,7 +321,12 @@ const packageBoundaryContract = (): void => {
     readFileSync(path.join(workflowRoot, 'package.json'), 'utf8'),
   ) as { exports: Record<string, unknown> };
   const exportKeys = Object.keys(packageJson.exports);
+  assert.equal(agentExecutorService.id, 'workflow/agent-executor');
+  assert.ok(agentExecutorService.multiple);
+  assert.ok(exportKeys.includes('./execution'));
   assert.ok(exportKeys.includes('./plugins/mcp-source-provider'));
+  assert.ok(exportKeys.includes('./schemas/execution-event.json'));
+  assert.ok(exportKeys.includes('./schemas/workflow-definition.json'));
   assert.ok(exportKeys.every((key) => !key.startsWith('./examples/')));
 };
 

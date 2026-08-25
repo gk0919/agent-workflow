@@ -1,0 +1,53 @@
+{
+  "$schema": "../schemas/workflow-definition.schema.json",
+  "schemaVersion": 1,
+  "id": "sample-read-only-review",
+  "description": "Phase 0 static-plan sample with independent review lanes and a deterministic join.",
+  "limits": {
+    "maxAgents": 3,
+    "maxAttemptsPerNode": 2,
+    "maxConcurrency": 2,
+    "maxDurationMs": 600000,
+    "maxExternalWrites": 0,
+    "maxIterations": 1
+  },
+  "nodes": [
+    {
+      "id": "discover",
+      "type": "agent",
+      "prompt": "Discover the targets that require review.",
+      "workspace": {"mode": "shared-readonly"},
+      "outputSchema": {
+        "type": "object",
+        "required": ["targets"],
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "correctness-review",
+      "type": "agent",
+      "dependsOn": ["discover"],
+      "prompt": "Review the discovered targets for correctness.",
+      "workspace": {"mode": "shared-readonly"}
+    },
+    {
+      "id": "security-review",
+      "type": "agent",
+      "dependsOn": ["discover"],
+      "prompt": "Review the discovered targets for security issues.",
+      "workspace": {"mode": "shared-readonly"}
+    },
+    {
+      "id": "review-result",
+      "type": "join",
+      "dependsOn": ["correctness-review", "security-review"]
+    }
+  ],
+  "resultNode": "review-result"
+}

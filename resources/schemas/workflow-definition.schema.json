@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/workflow-definition.schema.json",
+  "title": "Portable Multi-Agent Workflow Definition",
+  "description": "Phase 0 declarative workflow graph. This contract plans work but does not execute agents.",
+  "type": "object",
+  "required": ["schemaVersion", "id", "limits", "nodes", "resultNode"],
+  "properties": {
+    "$schema": {"type": "string", "maxLength": 500},
+    "schemaVersion": {"const": 1},
+    "id": {"$ref": "#/$defs/identifier"},
+    "description": {"type": "string", "minLength": 1, "maxLength": 500},
+    "inputSchema": {"$ref": "#/$defs/schemaValue"},
+    "limits": {"$ref": "#/$defs/limits"},
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/agentNode"},
+          {"$ref": "#/$defs/checkpointNode"},
+          {"$ref": "#/$defs/gateNode"},
+          {"$ref": "#/$defs/joinNode"}
+        ]
+      }
+    },
+    "resultNode": {"$ref": "#/$defs/identifier"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "capability": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:[.:/-][a-z0-9]+)*$"
+    },
+    "schemaValue": {
+      "oneOf": [
+        {"type": "boolean"},
+        {"type": "object"}
+      ]
+    },
+    "dependencyList": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/identifier"}
+    },
+    "capabilityList": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/capability"}
+    },
+    "permissionList": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "workspace:read",
+          "workspace:write",
+          "process:spawn",
+          "network:connect",
+          "secrets:read",
+          "artifact:read",
+          "artifact:write",
+          "telemetry:emit"
+        ]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": [
+        "maxAgents",
+        "maxAttemptsPerNode",
+        "maxConcurrency",
+        "maxDurationMs",
+        "maxExternalWrites",
+        "maxIterations"
+      ],
+      "properties": {
+        "maxAgents": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "maxAttemptsPerNode": {"type": "integer", "minimum": 1, "maximum": 10},
+        "maxConcurrency": {"type": "integer", "minimum": 1, "maximum": 64},
+        "maxDurationMs": {"type": "integer", "minimum": 1000, "maximum": 86400000},
+        "maxExternalWrites": {"type": "integer", "minimum": 0, "maximum": 100},
+        "maxIterations": {"type": "integer", "minimum": 1, "maximum": 100}
+      },
+      "additionalProperties": false
+    },
+    "nodeBase": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "type": {"enum": ["agent", "checkpoint", "gate", "join"]},
+        "label": {"type": "string", "minLength": 1, "maxLength": 200},
+        "dependsOn": {"$ref": "#/$defs/dependencyList"}
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {"enum": ["shared-readonly", "exclusive-worktree"]},
+        "repository": {"type": "string", "minLength": 1, "maxLength": 200}
+      },
+      "additionalProperties": false
+    },
+    "agentNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["prompt"],
+          "properties": {
+            "type": {"const": "agent"},
+            "prompt": {"type": "string", "minLength": 1, "maxLength": 20000},
+            "outputSchema": {"$ref": "#/$defs/schemaValue"},
+            "permissions": {"$ref": "#/$defs/permissionList"},
+            "requiredCapabilities": {"$ref": "#/$defs/capabilityList"},
+            "preferredCapabilities": {"$ref": "#/$defs/capabilityList"},
+            "workspace": {"$ref": "#/$defs/workspace"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "checkpointNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["approvalSummary", "dependsOn"],
+          "properties": {
+            "type": {"const": "checkpoint"},
+            "approvalSummary": {"type": "string", "minLength": 1, "maxLength": 500},
+            "dependsOn": {"$ref": "#/$defs/nonEmptyDependencyList"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "gateNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["condition", "dependsOn"],
+          "properties": {
+            "type": {"const": "gate"},
+            "condition": {"enum": ["all-completed", "all-succeeded"]},
+            "dependsOn": {"$ref": "#/$defs/nonEmptyDependencyList"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "joinNode": {
+      "type": "object",
+      "allOf": [
+        {"$ref": "#/$defs/nodeBase"},
+        {
+          "type": "object",
+          "required": ["dependsOn"],
+          "properties": {
+            "type": {"const": "join"},
+            "dependsOn": {"$ref": "#/$defs/nonEmptyDependencyList"}
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "nonEmptyDependencyList": {
+      "type": "array",
+      "allOf": [
+        {"$ref": "#/$defs/dependencyList"},
+        {"type": "array", "minItems": 1}
+      ]
+    }
+  }
+}
