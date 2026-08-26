@@ -170,6 +170,167 @@ const adaptiveLimits: WorkflowAdaptiveLimits = {
   maxTotalExternalWrites: 0,
 };
 
+const failOnceOnAppend = (
+  backing: ExecutionJournalStore,
+  eventType: ExecutionEvent['type'],
+): ExecutionJournalStore => {
+  let pendingFailure = true;
+  return {
+    append: (event) => {
+      if (pendingFailure && event.type === eventType) {
+        pendingFailure = false;
+        throw new Error(`simulated ${eventType} append failure`);
+      }
+      backing.append(event);
+    },
+    readEvents: () => backing.readEvents(),
+    readJsonArtifact: (reference) => backing.readJsonArtifact(reference),
+    runId: backing.runId,
+    writeJsonArtifact: (value) => backing.writeJsonArtifact(value),
+  };
+};
+
+const verifyInterruptedChildInitialization = async (
+  temporaryRoot: string,
+  eventType: 'run.plan-approved' | 'run.started',
+  suffix: string,
+  childExecutionMode: 'parallel-readonly' | 'serial',
+): Promise<void> => {
+  const parentStore = new FileExecutionJournalStore(
+    temporaryRoot,
+    `run-adaptiveparent${suffix}`,
+  );
+  const parent = await runApprovedWorkflow({
+    approval: approvalFor(rootDefinition),
+    definition: rootDefinition,
+    executionMode: 'serial',
+    executor: new FakeAgentExecutor(fixture),
+    input: { request: `parent-${suffix}` },
+    now: FIXED_NOW,
+    store: parentStore,
+  });
+  assert.equal(parent.status, 'paused');
+  const parentPreview = previewWorkflowDefinition(rootDefinition, 'serial');
+  const request = createWorkflowTransitionRequest({
+    checkpointNodeId: 'root-checkpoint',
+    runId: parentStore.runId,
+    workflowHash: parentPreview.workflowHash,
+    workflowId: parentPreview.workflowId,
+  }, childDefinition, {
+    executionMode: childExecutionMode,
+    limits: adaptiveLimits,
+    transitionId: `recover-${suffix}`,
+  });
+  const preview = previewWorkflowTransition(request, {
+    parentDefinition: rootDefinition,
+    parentStore,
+  });
+  const childBackingStore = new FileExecutionJournalStore(
+    temporaryRoot,
+    `run-adaptivechild${suffix}`,
+  );
+  const interruptedStore = failOnceOnAppend(childBackingStore, eventType);
+  const childInput = { request: `child-${suffix}` };
+  const transitionOptions = {
+    approval: transitionApprovalFor(preview),
+    childStore: interruptedStore,
+    executor: new FakeAgentExecutor(fixture),
+    input: childInput,
+    now: FIXED_NOW,
+    parentDefinition: rootDefinition,
+    parentStore,
+    request,
+  } as const;
+  await assert.rejects(
+    runApprovedWorkflowTransition(transitionOptions),
+    new RegExp(`simulated ${eventType} append failure`),
+  );
+  assert.equal(parentStore.readEvents().at(-1)?.type, 'run.transitioned');
+  assert.deepEqual(
+    childBackingStore.readEvents().map(({ type }) => type),
+    eventType === 'run.plan-approved'
+      ? ['run.created']
+      : ['run.created', 'run.plan-approved'],
+  );
+
+  const recovered = await runApprovedWorkflowTransition(transitionOptions);
+  assert.equal(recovered.child.status, 'paused');
+  assert.deepEqual(
+    childBackingStore.readEvents().slice(0, 3).map(({ type }) => type),
+    ['run.created', 'run.plan-approved', 'run.started'],
+  );
+  assert.equal(
+    childBackingStore.readEvents().filter(({ type }) => type === 'run.plan-approved').length,
+    1,
+  );
+  assert.equal(
+    parentStore.readEvents().filter(({ type }) => type === 'run.transitioned').length,
+    1,
+  );
+};
+
+const verifyStartedChildWithoutApprovalIsRejected = async (
+  temporaryRoot: string,
+): Promise<void> => {
+  const parentStore = new FileExecutionJournalStore(
+    temporaryRoot,
+    'run-adaptiveparentunapproved',
+  );
+  await runApprovedWorkflow({
+    approval: approvalFor(rootDefinition),
+    definition: rootDefinition,
+    executionMode: 'serial',
+    executor: new FakeAgentExecutor(fixture),
+    input: { request: 'parent-unapproved' },
+    now: FIXED_NOW,
+    store: parentStore,
+  });
+  const childBackingStore = new FileExecutionJournalStore(
+    temporaryRoot,
+    'run-adaptivechildunapproved',
+  );
+  const childInput = { request: 'child-unapproved' };
+  await assert.rejects(runSerialWorkflow({
+    definition: childDefinition,
+    executor: new FakeAgentExecutor(fixture),
+    input: childInput,
+    now: FIXED_NOW,
+    store: failOnceOnAppend(childBackingStore, 'node.scheduled'),
+  }), /simulated node.scheduled append failure/);
+  assert.deepEqual(
+    childBackingStore.readEvents().map(({ type }) => type),
+    ['run.created', 'run.started'],
+  );
+  const parentPreview = previewWorkflowDefinition(rootDefinition, 'serial');
+  const request = createWorkflowTransitionRequest({
+    checkpointNodeId: 'root-checkpoint',
+    runId: parentStore.runId,
+    workflowHash: parentPreview.workflowHash,
+    workflowId: parentPreview.workflowId,
+  }, childDefinition, {
+    executionMode: 'serial',
+    limits: adaptiveLimits,
+    transitionId: 'reject-unapproved-child',
+  });
+  const preview = previewWorkflowTransition(request, {
+    parentDefinition: rootDefinition,
+    parentStore,
+  });
+  const parentEventCount = parentStore.readEvents().length;
+  await assert.rejects(runApprovedWorkflowTransition({
+    approval: transitionApprovalFor(preview),
+    childStore: childBackingStore,
+    executor: new FakeAgentExecutor(fixture),
+    input: childInput,
+    now: FIXED_NOW,
+    parentDefinition: rootDefinition,
+    parentStore,
+    request,
+  }), /缺少唯一的批准 Journal/);
+  assert.equal(parentStore.readEvents().length, parentEventCount);
+  assert.equal(parentStore.readEvents().at(-1)?.type, 'run.paused');
+};
+
 /** Guards checkpoint transitions, cumulative budgets, lineage audit and replay. */
 export const main = async (): Promise<number> => {
   const temporaryRoot = mkdtempSync(
@@ -257,6 +418,20 @@ export const main = async (): Promise<number> => {
     assert.equal(resumedLegacy.status, 'completed');
     assert.equal(legacyEvents.filter(({ type }) => type === 'run.plan-approved').length, 1);
     assert.equal(legacyEvents.find(({ type }) => type === 'run.plan-approved')?.schemaVersion, 2);
+
+    await verifyInterruptedChildInitialization(
+      temporaryRoot,
+      'run.plan-approved',
+      'created',
+      'serial',
+    );
+    await verifyInterruptedChildInitialization(
+      temporaryRoot,
+      'run.started',
+      'parallel',
+      'parallel-readonly',
+    );
+    await verifyStartedChildWithoutApprovalIsRejected(temporaryRoot);
 
     const parentStore = new FileExecutionJournalStore(
       temporaryRoot,
@@ -531,7 +706,7 @@ export const main = async (): Promise<number> => {
     );
 
     process.stdout.write(
-      '执行内核 Phase 6 回归通过：Checkpoint Transition、累计预算、批准 Journal、父子 Run 与幂等恢复稳定。\n',
+      '执行内核 Phase 6 回归通过：Checkpoint Transition、累计预算、批准 Journal、初始化中断恢复、父子 Run 与幂等恢复稳定。\n',
     );
     return 0;
   } catch (error: unknown) {

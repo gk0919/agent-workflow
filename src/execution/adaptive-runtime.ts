@@ -137,7 +137,11 @@ const inspectParent = (
     event.workflowHash !== plan.workflowHash)) {
     throw new Error('Parent Journal 与 Transition Parent 身份不一致');
   }
-  const started = events.find(({ type }) => type === 'run.started');
+  const startedEvents = events.filter(({ type }) => type === 'run.started');
+  if (startedEvents.length > 1) {
+    throw new Error('既有 Child Run 包含多个启动 Journal');
+  }
+  const started = startedEvents[0];
   const startedPayload = objectValue(started?.payload, 'run.started.payload');
   const mode = stringValue(startedPayload, 'mode', 'run.started.payload');
   if (!WORKFLOW_EXECUTION_MODES.includes(mode as WorkflowExecutionMode)) {
@@ -493,10 +497,24 @@ const validateChildStoreReuse = (
     throw new Error('Child Run ID 已被其他 Workflow 使用');
   }
   const approvals = events.filter(({ type }) => type === 'run.plan-approved');
-  if (approvals.length !== 1) {
-    throw new Error('既有 Child Run 缺少唯一的批准 Journal');
+  if (approvals.length > 1) {
+    throw new Error('既有 Child Run 包含多个批准 Journal');
   }
-  const approval = objectValue(approvals[0]?.payload, 'run.plan-approved.payload');
+  const created = objectValue(events[0]?.payload, 'run.created.payload');
+  if (created.inputHash !== hashPortableJson(input)) {
+    throw new Error('既有 Child Run 的 input 与当前 Transition 调用不匹配');
+  }
+  if (approvals.length === 0) {
+    if (events.length !== 1) {
+      throw new Error('既有 Child Run 缺少唯一的批准 Journal');
+    }
+    return true;
+  }
+  const approvalEvent = approvals[0] as ExecutionEvent;
+  if (events[1]?.eventHash !== approvalEvent.eventHash) {
+    throw new Error('既有 Child Run 的批准 Journal 顺序无效');
+  }
+  const approval = objectValue(approvalEvent.payload, 'run.plan-approved.payload');
   const transition = objectValue(
     approval.transition,
     'run.plan-approved.payload.transition',
@@ -508,11 +526,16 @@ const validateChildStoreReuse = (
   ) {
     throw new Error('既有 Child Run 的 Transition 批准上下文不匹配');
   }
-  const created = objectValue(events[0]?.payload, 'run.created.payload');
-  if (created.inputHash !== hashPortableJson(input)) {
-    throw new Error('既有 Child Run 的 input 与当前 Transition 调用不匹配');
-  }
   const started = events.find(({ type }) => type === 'run.started');
+  if (!started) {
+    if (events.length !== 2) {
+      throw new Error('既有 Child Run 的初始化事件前缀不完整或顺序无效');
+    }
+    return true;
+  }
+  if (events[2]?.eventHash !== started.eventHash) {
+    throw new Error('既有 Child Run 的启动 Journal 顺序无效');
+  }
   const startedPayload = objectValue(started?.payload, 'run.started.payload');
   if (startedPayload.mode !== preview.child.executionMode) {
     throw new Error('既有 Child Run 的 executionMode 与当前 Transition 不匹配');

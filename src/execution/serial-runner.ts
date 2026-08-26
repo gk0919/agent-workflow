@@ -192,7 +192,13 @@ const validatePersistedApprovalContext = (
     return 'valid';
   }
   const approvalEvents = events.filter(({ type }) => type === 'run.plan-approved');
-  if (approvalEvents.length === 0 && events.every(({ schemaVersion }) => schemaVersion === 1)) {
+  if (
+    approvalEvents.length === 0 &&
+    (
+      events.every(({ schemaVersion }) => schemaVersion === 1) ||
+      (events.length === 1 && events[0]?.type === 'run.created')
+    )
+  ) {
     return 'backfill';
   }
   if (approvalEvents.length !== 1) {
@@ -204,6 +210,20 @@ const validatePersistedApprovalContext = (
   }
   return 'valid';
 };
+
+const isRecoverableRunInitialization = (
+  events: readonly ExecutionEvent[],
+  context: WorkflowRunApprovalContext | undefined,
+): boolean =>
+  // Only prefixes emitted before any executor work may be completed in place. An already
+  // persisted approval is reusable only when the caller presents the matching approval context.
+  (events.length === 1 && events[0]?.type === 'run.created') ||
+  (
+    context !== undefined &&
+    events.length === 2 &&
+    events[0]?.type === 'run.created' &&
+    events[1]?.type === 'run.plan-approved'
+  );
 
 const artifactToJson = (reference: ExecutionArtifactReference): PluginJsonObject => ({
   byteLength: reference.byteLength,
@@ -1119,49 +1139,73 @@ const runSerialWorkflowInternal = async (
       mode: 'serial',
     });
   } else {
-    if (validatePersistedApprovalContext(
+    const approvalState = validatePersistedApprovalContext(
       existingEvents,
       options.approvalContext,
       plan,
       'serial',
-    ) === 'backfill' && options.approvalContext) {
-      writer.emit(
-        'run.plan-approved',
-        approvalContextToJson(options.approvalContext, plan, 'serial'),
-      );
-    }
+    );
     const identity = runIdentityFromCreated(existingEvents[0] as ExecutionEvent);
     if (identity.inputHash !== inputHash) {
       throw new Error('Input hash 与现有 Run 不匹配，禁止复用');
     }
     inputArtifact = identity.inputArtifact;
     options.store.readJsonArtifact(inputArtifact);
-    const status = terminalStatus(existingEvents.at(-1));
-    if (status) {
-      return buildRunResult(definition, plan, options.store, existingEvents, status);
+    const initializationRecovery = !existingEvents.some(({ type }) => type === 'run.started');
+    if (initializationRecovery) {
+      if (!isRecoverableRunInitialization(existingEvents, options.approvalContext)) {
+        throw new Error('Execution Journal 的初始化事件前缀不完整或顺序无效');
+      }
+      const capabilities = await describeExecutor(options.executor);
+      const compatibility = executorCompatibilityFindings(definition, capabilities);
+      if (compatibility.errors.length > 0) {
+        throw new Error(`Executor 不兼容：\n- ${compatibility.errors.join('\n- ')}`);
+      }
+      if (approvalState === 'backfill' && options.approvalContext) {
+        writer.emit(
+          'run.plan-approved',
+          approvalContextToJson(options.approvalContext, plan, 'serial'),
+        );
+      }
+      writer.emit('run.started', {
+        degradedCapabilities: compatibility.degraded,
+        executorId: options.executor.id,
+        mode: 'serial',
+      });
+    } else {
+      if (approvalState === 'backfill' && options.approvalContext) {
+        writer.emit(
+          'run.plan-approved',
+          approvalContextToJson(options.approvalContext, plan, 'serial'),
+        );
+      }
+      const status = terminalStatus(existingEvents.at(-1));
+      if (status) {
+        return buildRunResult(definition, plan, options.store, existingEvents, status);
+      }
+      const lastEvent = existingEvents.at(-1) as ExecutionEvent;
+      const lastPayload = objectValue(lastEvent.payload, `${lastEvent.type}.payload`);
+      const checkpointNodeId = lastEvent.type === 'run.paused' &&
+        lastPayload.reason === 'checkpoint'
+        ? lastPayload.checkpointNodeId
+        : undefined;
+      if (
+        typeof checkpointNodeId === 'string' &&
+        !(options.approvedCheckpoints ?? []).includes(checkpointNodeId)
+      ) {
+        return buildRunResult(definition, plan, options.store, existingEvents, 'paused');
+      }
+      const capabilities = await describeExecutor(options.executor);
+      const compatibility = executorCompatibilityFindings(definition, capabilities);
+      if (compatibility.errors.length > 0) {
+        throw new Error(`Executor 不兼容：\n- ${compatibility.errors.join('\n- ')}`);
+      }
+      writer.emit('run.resumed', {
+        ...(typeof checkpointNodeId === 'string' ? { approvedCheckpoint: checkpointNodeId } : {}),
+        degradedCapabilities: compatibility.degraded,
+        reason: typeof checkpointNodeId === 'string' ? 'checkpoint-approved' : 'recovery',
+      });
     }
-    const lastEvent = existingEvents.at(-1) as ExecutionEvent;
-    const lastPayload = objectValue(lastEvent.payload, `${lastEvent.type}.payload`);
-    const checkpointNodeId = lastEvent.type === 'run.paused' &&
-      lastPayload.reason === 'checkpoint'
-      ? lastPayload.checkpointNodeId
-      : undefined;
-    if (
-      typeof checkpointNodeId === 'string' &&
-      !(options.approvedCheckpoints ?? []).includes(checkpointNodeId)
-    ) {
-      return buildRunResult(definition, plan, options.store, existingEvents, 'paused');
-    }
-    const capabilities = await describeExecutor(options.executor);
-    const compatibility = executorCompatibilityFindings(definition, capabilities);
-    if (compatibility.errors.length > 0) {
-      throw new Error(`Executor 不兼容：\n- ${compatibility.errors.join('\n- ')}`);
-    }
-    writer.emit('run.resumed', {
-      ...(typeof checkpointNodeId === 'string' ? { approvedCheckpoint: checkpointNodeId } : {}),
-      degradedCapabilities: compatibility.degraded,
-      reason: typeof checkpointNodeId === 'string' ? 'checkpoint-approved' : 'recovery',
-    });
   }
 
   const states = replayNodeStates(definition, writer.events);
@@ -2553,71 +2597,110 @@ const runParallelWorkflowInternal = async (
         : {}),
     });
   } else {
-    if (validatePersistedApprovalContext(
+    const approvalState = validatePersistedApprovalContext(
       existingEvents,
       options.approvalContext,
       plan,
       executionMode,
-    ) === 'backfill' && options.approvalContext) {
-      writer.emit(
-        'run.plan-approved',
-        approvalContextToJson(options.approvalContext, plan, executionMode),
-      );
-    }
-    const startedEvent = existingEvents.find((event) => event.type === 'run.started');
-    const startedPayload = objectValue(startedEvent?.payload ?? {}, 'run.started.payload');
-    if (startedPayload.mode !== executionMode) {
-      throw new Error('Execution mode 与现有 Run 不匹配');
-    }
-    if (
-      requiresWorkspace &&
-      startedPayload.workspaceServiceId !== options.workspace?.id
-    ) {
-      throw new Error('Execution Workspace Service 与现有 Run 不匹配');
-    }
+    );
     const identity = runIdentityFromCreated(existingEvents[0] as ExecutionEvent);
     if (identity.inputHash !== inputHash) {
       throw new Error('Input hash 与现有 Run 不匹配，禁止复用');
     }
     inputArtifact = identity.inputArtifact;
     options.store.readJsonArtifact(inputArtifact);
-    const status = terminalStatus(existingEvents.at(-1));
-    if (status) {
-      return buildRunResult(definition, plan, options.store, existingEvents, status);
+    const initializationRecovery = !existingEvents.some(({ type }) => type === 'run.started');
+    if (initializationRecovery) {
+      if (!isRecoverableRunInitialization(existingEvents, options.approvalContext)) {
+        throw new Error('Execution Journal 的初始化事件前缀不完整或顺序无效');
+      }
+      const capabilities = await describeExecutor(options.executor);
+      const negotiation = negotiateExecutorCapabilities(definition, capabilities);
+      if (negotiation.errors.length > 0) {
+        throw new Error(`Executor 不兼容：\n- ${negotiation.errors.join('\n- ')}`);
+      }
+      if (negotiation.mode === 'serial-fallback' && options.serialFallback === 'reject') {
+        throw new Error(
+          `Executor 只能提供串行能力：requested=${negotiation.requestedConcurrency}, ` +
+          `effective=${negotiation.effectiveConcurrency}`,
+        );
+      }
+      effectiveConcurrency = negotiation.effectiveConcurrency;
+      if (approvalState === 'backfill' && options.approvalContext) {
+        writer.emit(
+          'run.plan-approved',
+          approvalContextToJson(options.approvalContext, plan, executionMode),
+        );
+      }
+      writer.emit('run.started', {
+        degradedCapabilities: [
+          ...negotiation.degradedCapabilities,
+        ],
+        effectiveConcurrency,
+        executorMode: negotiation.mode,
+        executorId: options.executor.id,
+        mode: executionMode,
+        requestedConcurrency: definition.limits.maxConcurrency,
+        ...(requiresWorkspace && options.workspace
+          ? { workspaceServiceId: options.workspace.id }
+          : {}),
+      });
+    } else {
+      if (approvalState === 'backfill' && options.approvalContext) {
+        writer.emit(
+          'run.plan-approved',
+          approvalContextToJson(options.approvalContext, plan, executionMode),
+        );
+      }
+      const startedEvent = existingEvents.find((event) => event.type === 'run.started');
+      const startedPayload = objectValue(startedEvent?.payload ?? {}, 'run.started.payload');
+      if (startedPayload.mode !== executionMode) {
+        throw new Error('Execution mode 与现有 Run 不匹配');
+      }
+      if (
+        requiresWorkspace &&
+        startedPayload.workspaceServiceId !== options.workspace?.id
+      ) {
+        throw new Error('Execution Workspace Service 与现有 Run 不匹配');
+      }
+      const status = terminalStatus(existingEvents.at(-1));
+      if (status) {
+        return buildRunResult(definition, plan, options.store, existingEvents, status);
+      }
+      const lastEvent = existingEvents.at(-1) as ExecutionEvent;
+      const lastPayload = objectValue(lastEvent.payload, `${lastEvent.type}.payload`);
+      const checkpointNodeId = lastEvent.type === 'run.paused' &&
+        lastPayload.reason === 'checkpoint'
+        ? lastPayload.checkpointNodeId
+        : undefined;
+      if (
+        typeof checkpointNodeId === 'string' &&
+        !(options.approvedCheckpoints ?? []).includes(checkpointNodeId)
+      ) {
+        return buildRunResult(definition, plan, options.store, existingEvents, 'paused');
+      }
+      const capabilities = await describeExecutor(options.executor);
+      const negotiation = negotiateExecutorCapabilities(definition, capabilities);
+      if (negotiation.errors.length > 0) {
+        throw new Error(`Executor 不兼容：\n- ${negotiation.errors.join('\n- ')}`);
+      }
+      if (negotiation.mode === 'serial-fallback' && options.serialFallback === 'reject') {
+        throw new Error(
+          `Executor 只能提供串行能力：requested=${negotiation.requestedConcurrency}, ` +
+          `effective=${negotiation.effectiveConcurrency}`,
+        );
+      }
+      effectiveConcurrency = negotiation.effectiveConcurrency;
+      writer.emit('run.resumed', {
+        ...(typeof checkpointNodeId === 'string' ? { approvedCheckpoint: checkpointNodeId } : {}),
+        degradedCapabilities: [
+          ...negotiation.degradedCapabilities,
+        ],
+        effectiveConcurrency,
+        executorMode: negotiation.mode,
+        reason: typeof checkpointNodeId === 'string' ? 'checkpoint-approved' : 'recovery',
+      });
     }
-    const lastEvent = existingEvents.at(-1) as ExecutionEvent;
-    const lastPayload = objectValue(lastEvent.payload, `${lastEvent.type}.payload`);
-    const checkpointNodeId = lastEvent.type === 'run.paused' &&
-      lastPayload.reason === 'checkpoint'
-      ? lastPayload.checkpointNodeId
-      : undefined;
-    if (
-      typeof checkpointNodeId === 'string' &&
-      !(options.approvedCheckpoints ?? []).includes(checkpointNodeId)
-    ) {
-      return buildRunResult(definition, plan, options.store, existingEvents, 'paused');
-    }
-    const capabilities = await describeExecutor(options.executor);
-    const negotiation = negotiateExecutorCapabilities(definition, capabilities);
-    if (negotiation.errors.length > 0) {
-      throw new Error(`Executor 不兼容：\n- ${negotiation.errors.join('\n- ')}`);
-    }
-    if (negotiation.mode === 'serial-fallback' && options.serialFallback === 'reject') {
-      throw new Error(
-        `Executor 只能提供串行能力：requested=${negotiation.requestedConcurrency}, ` +
-        `effective=${negotiation.effectiveConcurrency}`,
-      );
-    }
-    effectiveConcurrency = negotiation.effectiveConcurrency;
-    writer.emit('run.resumed', {
-      ...(typeof checkpointNodeId === 'string' ? { approvedCheckpoint: checkpointNodeId } : {}),
-      degradedCapabilities: [
-        ...negotiation.degradedCapabilities,
-      ],
-      effectiveConcurrency,
-      executorMode: negotiation.mode,
-      reason: typeof checkpointNodeId === 'string' ? 'checkpoint-approved' : 'recovery',
-    });
   }
 
   const states = replayNodeStates(definition, writer.events);

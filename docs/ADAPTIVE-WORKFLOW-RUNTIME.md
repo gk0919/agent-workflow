@@ -63,7 +63,10 @@ Child Run 和 Transition 身份。Child 在 `run.started` 前追加 `run.plan-ap
 - Parent 收口通过 Journal 序号和 hash 链竞争，同一 Checkpoint 只有一个 Transition 获胜。
 - 相同 `transitionHash + childRunId + inputHash` 的顺序重试是幂等的；并发竞争者可能收到冲突并重试。
 - Parent 已收口而 Child 尚未开始时，重复调用会启动 Child。
-- Child 已有事件时，重复调用使用现有 Runner 的 `resume` 路径。
+- Child 仅持久化 `run.created`，或仅持久化 `run.created + run.plan-approved` 时，重复调用会校验
+  Definition、input 和批准上下文，然后补齐初始化事件并继续执行。
+- 已经启动的 Child 使用现有 Runner 的 `resume` 路径；缺少批准却已经执行、顺序异常或身份不一致的
+  Journal 前缀会被拒绝。
 - 不同 Transition 或不同 Child Run 复用已收口 Parent 时会被拒绝。
 
 ## 公共 API
