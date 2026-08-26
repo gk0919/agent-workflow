@@ -8,7 +8,9 @@ import type { PluginPermission } from './plugin.js';
 export const WORKFLOW_DEFINITION_SCHEMA_VERSION = 1 as const;
 export const WORKFLOW_DEFINITION_BUNDLE_SCHEMA_VERSION = 1 as const;
 export const WORKFLOW_AUTHORING_SCHEMA_VERSION = 1 as const;
-export const EXECUTION_EVENT_SCHEMA_VERSION = 1 as const;
+export const WORKFLOW_TRANSITION_SCHEMA_VERSION = 1 as const;
+export const EXECUTION_EVENT_SCHEMA_VERSION = 2 as const;
+export const EXECUTION_EVENT_SCHEMA_VERSIONS = [1, 2] as const;
 export const AGENT_EXECUTOR_API_VERSION = 1 as const;
 export const FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION = 1 as const;
 
@@ -41,6 +43,7 @@ export type WorkflowDefinitionSource = typeof WORKFLOW_DEFINITION_SOURCES[number
 
 export const EXECUTION_EVENT_TYPES = [
   'run.created',
+  'run.plan-approved',
   'run.started',
   'node.scheduled',
   'node.started',
@@ -57,6 +60,7 @@ export const EXECUTION_EVENT_TYPES = [
   'run.cancelled',
   'run.completed',
   'run.failed',
+  'run.transitioned',
 ] as const;
 export type ExecutionEventType = typeof EXECUTION_EVENT_TYPES[number];
 
@@ -216,7 +220,7 @@ export interface ExecutionEvent {
   readonly payload: Readonly<PluginJsonObject>;
   readonly previousEventHash?: string | null;
   readonly runId: string;
-  readonly schemaVersion: typeof EXECUTION_EVENT_SCHEMA_VERSION;
+  readonly schemaVersion: typeof EXECUTION_EVENT_SCHEMA_VERSIONS[number];
   readonly sequence: number;
   readonly timestamp: string;
   readonly type: ExecutionEventType;
@@ -500,6 +504,87 @@ export interface WorkflowExecutionApproval {
   readonly workflowHash: string;
 }
 
+export interface WorkflowAdaptiveLimits {
+  readonly maxDepth: number;
+  readonly maxTotalAgents: number;
+  readonly maxTotalDurationMs: number;
+  readonly maxTotalExecutorCalls: number;
+  readonly maxTotalExternalWrites: number;
+}
+
+export interface WorkflowAdaptiveBudgetReservation {
+  readonly definitions: number;
+  readonly depth: number;
+  readonly totalAgents: number;
+  readonly totalDurationMs: number;
+  readonly totalExecutorCalls: number;
+  readonly totalExternalWrites: number;
+}
+
+export interface WorkflowTransitionParent {
+  readonly checkpointNodeId: string;
+  readonly runId: string;
+  readonly workflowHash: string;
+  readonly workflowId: string;
+}
+
+/** Portable request to continue a checkpointed run with a newly authored child workflow. */
+export interface WorkflowTransitionRequest {
+  readonly definition: WorkflowDefinition;
+  readonly executionMode: WorkflowExecutionMode;
+  readonly kind: 'workflow-transition';
+  readonly limits: WorkflowAdaptiveLimits;
+  readonly parent: WorkflowTransitionParent;
+  readonly schemaVersion: typeof WORKFLOW_TRANSITION_SCHEMA_VERSION;
+  readonly transitionId: string;
+}
+
+/** Deterministic approval surface for one parent-to-child workflow transition. */
+export interface WorkflowTransitionPreview {
+  readonly child: WorkflowAuthoringPreview;
+  readonly cumulativeBudget: WorkflowAdaptiveBudgetReservation;
+  readonly limits: WorkflowAdaptiveLimits;
+  readonly parent: WorkflowTransitionParent;
+  readonly schemaVersion: typeof WORKFLOW_TRANSITION_SCHEMA_VERSION;
+  readonly transitionHash: string;
+  readonly transitionId: string;
+}
+
+export interface WorkflowTransitionApproval {
+  readonly childPreviewHash: string;
+  readonly executionMode: WorkflowExecutionMode;
+  readonly parentWorkflowHash: string;
+  readonly schemaVersion: typeof WORKFLOW_TRANSITION_SCHEMA_VERSION;
+  readonly transitionHash: string;
+}
+
+export interface WorkflowTransitionRunResult {
+  readonly child: ExecutionRunResult;
+  readonly parentEventCount: number;
+  readonly preview: WorkflowTransitionPreview;
+}
+
+export interface WorkflowRunTransitionContext {
+  readonly checkpointNodeId: string;
+  readonly cumulativeBudget: WorkflowAdaptiveBudgetReservation;
+  readonly depth: number;
+  readonly limits: WorkflowAdaptiveLimits;
+  readonly parentRunId: string;
+  readonly parentWorkflowHash: string;
+  readonly parentWorkflowId: string;
+  readonly transitionHash: string;
+  readonly transitionId: string;
+}
+
+/** Approval evidence persisted before an approved run starts. */
+export interface WorkflowRunApprovalContext {
+  readonly executionMode: WorkflowExecutionMode;
+  readonly previewHash: string;
+  readonly schemaVersion: typeof WORKFLOW_AUTHORING_SCHEMA_VERSION;
+  readonly transition?: WorkflowRunTransitionContext;
+  readonly workflowHash: string;
+}
+
 export interface ExecutionArtifactReference {
   readonly byteLength: number;
   readonly id: string;
@@ -507,7 +592,12 @@ export interface ExecutionArtifactReference {
   readonly sha256: string;
 }
 
-export type ExecutionRunStatus = 'cancelled' | 'completed' | 'failed' | 'paused';
+export type ExecutionRunStatus =
+  | 'cancelled'
+  | 'completed'
+  | 'failed'
+  | 'paused'
+  | 'transitioned';
 
 export type ExecutionRunErrorCode =
   | 'budget-exhausted'
@@ -576,7 +666,7 @@ export interface ExecutionRunResult {
 export interface ExecutionControlResult {
   readonly eventCount: number;
   readonly runId: string;
-  readonly status: 'cancelled' | 'completed' | 'failed' | 'paused';
+  readonly status: ExecutionRunStatus;
 }
 
 /** Append-only event and content-addressed JSON persistence used by the execution kernel. */

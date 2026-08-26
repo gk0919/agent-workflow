@@ -46,6 +46,7 @@
     "./schemas/fake-executor-fixture.json": "./resources/schemas/fake-executor-fixture.schema.json",
     "./schemas/workflow-definition.json": "./resources/schemas/workflow-definition.schema.json",
     "./schemas/workflow-definition-bundle.json": "./resources/schemas/workflow-definition-bundle.schema.json",
+    "./schemas/workflow-transition.json": "./resources/schemas/workflow-transition.schema.json",
     "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
     "./package.json": "./package.json"
   },
@@ -63,6 +64,9 @@
     "workflow:classify": "node dist/bin/agent-workflow.js classify",
     "workflow:context": "node dist/bin/agent-workflow.js context",
     "workflow:execution:plan": "node dist/bin/agent-workflow.js execution:plan",
+    "workflow:execution:adaptive:preview": "node dist/bin/agent-workflow.js execution:adaptive:preview",
+    "workflow:execution:adaptive:run": "node dist/bin/agent-workflow.js execution:adaptive:run",
+    "workflow:execution:adaptive:test": "node dist/bin/agent-workflow.js execution:adaptive:test",
     "workflow:execution:author:preview": "node dist/bin/agent-workflow.js execution:author:preview",
     "workflow:execution:author:save": "node dist/bin/agent-workflow.js execution:author:save",
     "workflow:execution:author:migrate": "node dist/bin/agent-workflow.js execution:author:migrate",

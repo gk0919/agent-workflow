@@ -3,6 +3,7 @@ import type { PluginJsonObject, PluginJsonValue } from '../contracts/json.js';
 import {
   AGENT_EXECUTOR_API_VERSION,
   EXECUTION_EVENT_SCHEMA_VERSION,
+  WORKFLOW_AUTHORING_SCHEMA_VERSION,
   type AgentExecutionRequest,
   type AgentExecutionResult,
   type AgentExecutorCapabilities,
@@ -30,6 +31,7 @@ import {
   type StaticExecutionPlan,
   type WorkflowDefinition,
   type WorkflowNode,
+  type WorkflowRunApprovalContext,
 } from '../contracts/execution.js';
 import {
   compileStaticExecutionPlan,
@@ -52,6 +54,7 @@ const TERMINAL_EVENT_TYPES = new Set<ExecutionEventType>([
   'run.cancelled',
   'run.completed',
   'run.failed',
+  'run.transitioned',
 ]);
 
 export interface SerialExecutionOptions {
@@ -72,6 +75,14 @@ export interface ParallelExecutionOptions extends SerialExecutionOptions {
 export type PortableExecutionOptions = ParallelExecutionOptions;
 
 export type WritableExecutionOptions = ParallelExecutionOptions;
+
+type InternalSerialExecutionOptions = SerialExecutionOptions & {
+  readonly approvalContext?: WorkflowRunApprovalContext;
+};
+
+type InternalParallelExecutionOptions = ParallelExecutionOptions & {
+  readonly approvalContext?: WorkflowRunApprovalContext;
+};
 
 type ResolvedWritableExecutionOptions = ParallelExecutionOptions & {
   readonly workspace: ExecutionWorkspaceService;
@@ -153,6 +164,45 @@ const stringValue = (record: Record<string, unknown>, key: string, label: string
     throw new Error(`${label}.${key} 必须是字符串`);
   }
   return value;
+};
+
+const approvalContextToJson = (
+  context: WorkflowRunApprovalContext,
+  plan: StaticExecutionPlan,
+  executionMode: WorkflowRunApprovalContext['executionMode'],
+): PluginJsonObject => {
+  if (
+    context.schemaVersion !== WORKFLOW_AUTHORING_SCHEMA_VERSION ||
+    context.workflowHash !== plan.workflowHash ||
+    context.executionMode !== executionMode ||
+    !/^[a-f0-9]{64}$/.test(context.previewHash)
+  ) {
+    throw new Error('Workflow 批准上下文与当前执行计划不一致');
+  }
+  return JSON.parse(serializeCanonicalJson(context)) as PluginJsonObject;
+};
+
+const validatePersistedApprovalContext = (
+  events: readonly ExecutionEvent[],
+  context: WorkflowRunApprovalContext | undefined,
+  plan: StaticExecutionPlan,
+  executionMode: WorkflowRunApprovalContext['executionMode'],
+): 'backfill' | 'valid' => {
+  if (!context) {
+    return 'valid';
+  }
+  const approvalEvents = events.filter(({ type }) => type === 'run.plan-approved');
+  if (approvalEvents.length === 0 && events.every(({ schemaVersion }) => schemaVersion === 1)) {
+    return 'backfill';
+  }
+  if (approvalEvents.length !== 1) {
+    throw new Error('Execution Journal 缺少唯一的 Workflow 批准事件');
+  }
+  const expected = approvalContextToJson(context, plan, executionMode);
+  if (serializeCanonicalJson(approvalEvents[0]?.payload) !== serializeCanonicalJson(expected)) {
+    throw new Error('Execution Journal 的 Workflow 批准上下文不匹配');
+  }
+  return 'valid';
 };
 
 const artifactToJson = (reference: ExecutionArtifactReference): PluginJsonObject => ({
@@ -914,7 +964,7 @@ const buildRunResult = (
 ): ExecutionRunResult => {
   const states = replayNodeStates(definition, events);
   const terminal = events.at(-1);
-  const resultArtifact = terminal?.type === 'run.completed'
+  const resultArtifact = terminal?.type === 'run.completed' || terminal?.type === 'run.transitioned'
     ? artifactFromJson(
       objectValue(terminal.payload, 'run.completed.payload').resultArtifact,
       'run.completed.payload.resultArtifact',
@@ -992,6 +1042,9 @@ const terminalStatus = (event: ExecutionEvent | undefined): ExecutionRunResult['
   if (event?.type === 'run.cancelled') {
     return 'cancelled';
   }
+  if (event?.type === 'run.transitioned') {
+    return 'transitioned';
+  }
   if (event?.type === 'run.failed') {
     return 'failed';
   }
@@ -1014,7 +1067,7 @@ const emitRunFailure = (
 };
 
 const runSerialWorkflowInternal = async (
-  options: SerialExecutionOptions,
+  options: InternalSerialExecutionOptions,
 ): Promise<ExecutionRunResult> => {
   const plan = compileStaticExecutionPlan(options.definition);
   const definition = options.definition as WorkflowDefinition;
@@ -1054,12 +1107,29 @@ const runSerialWorkflowInternal = async (
       inputArtifact: artifactToJson(inputArtifact),
       inputHash,
     });
+    if (options.approvalContext) {
+      writer.emit(
+        'run.plan-approved',
+        approvalContextToJson(options.approvalContext, plan, 'serial'),
+      );
+    }
     writer.emit('run.started', {
       degradedCapabilities: compatibility.degraded,
       executorId: options.executor.id,
       mode: 'serial',
     });
   } else {
+    if (validatePersistedApprovalContext(
+      existingEvents,
+      options.approvalContext,
+      plan,
+      'serial',
+    ) === 'backfill' && options.approvalContext) {
+      writer.emit(
+        'run.plan-approved',
+        approvalContextToJson(options.approvalContext, plan, 'serial'),
+      );
+    }
     const identity = runIdentityFromCreated(existingEvents[0] as ExecutionEvent);
     if (identity.inputHash !== inputHash) {
       throw new Error('Input hash 与现有 Run 不匹配，禁止复用');
@@ -1355,6 +1425,15 @@ export const runSerialWorkflow = async (
     return buildControlledRunResult(options, error.status);
   }
 };
+
+/** Internal approved-run bridge; intentionally omitted from package public exports. */
+export const runSerialWorkflowWithApprovalContext = async (
+  options: SerialExecutionOptions,
+  approvalContext: WorkflowRunApprovalContext,
+): Promise<ExecutionRunResult> => await runSerialWorkflow({
+  ...options,
+  approvalContext,
+} as InternalSerialExecutionOptions);
 
 const parallelNodeIdentity = (
   task: ParallelAgentTask,
@@ -2393,7 +2472,7 @@ const finalizeMapNode = (
 };
 
 const runParallelWorkflowInternal = async (
-  options: ParallelExecutionOptions,
+  options: InternalParallelExecutionOptions,
   executionMode: 'parallel-readonly' | 'writable-worktree',
 ): Promise<ExecutionRunResult> => {
   const plan = compileStaticExecutionPlan(options.definition);
@@ -2454,6 +2533,12 @@ const runParallelWorkflowInternal = async (
       inputArtifact: artifactToJson(inputArtifact),
       inputHash,
     });
+    if (options.approvalContext) {
+      writer.emit(
+        'run.plan-approved',
+        approvalContextToJson(options.approvalContext, plan, executionMode),
+      );
+    }
     writer.emit('run.started', {
       degradedCapabilities: [
         ...negotiation.degradedCapabilities,
@@ -2468,6 +2553,17 @@ const runParallelWorkflowInternal = async (
         : {}),
     });
   } else {
+    if (validatePersistedApprovalContext(
+      existingEvents,
+      options.approvalContext,
+      plan,
+      executionMode,
+    ) === 'backfill' && options.approvalContext) {
+      writer.emit(
+        'run.plan-approved',
+        approvalContextToJson(options.approvalContext, plan, executionMode),
+      );
+    }
     const startedEvent = existingEvents.find((event) => event.type === 'run.started');
     const startedPayload = objectValue(startedEvent?.payload ?? {}, 'run.started.payload');
     if (startedPayload.mode !== executionMode) {
@@ -2792,6 +2888,15 @@ export const runParallelWorkflow = async (
   }
 };
 
+/** Internal approved-run bridge; intentionally omitted from package public exports. */
+export const runParallelWorkflowWithApprovalContext = async (
+  options: ParallelExecutionOptions,
+  approvalContext: WorkflowRunApprovalContext,
+): Promise<ExecutionRunResult> => await runParallelWorkflow({
+  ...options,
+  approvalContext,
+} as InternalParallelExecutionOptions);
+
 /** Executes Phase 4 workflows with isolated writable worktrees and explicit integration. */
 export const runWritableWorkflow = async (
   options: WritableExecutionOptions,
@@ -2804,6 +2909,29 @@ export const runWritableWorkflow = async (
     }
     return buildControlledRunResult(options, error.status);
   }
+};
+
+/** Internal approved-run bridge; intentionally omitted from package public exports. */
+export const runWritableWorkflowWithApprovalContext = async (
+  options: WritableExecutionOptions,
+  approvalContext: WorkflowRunApprovalContext,
+): Promise<ExecutionRunResult> => await runWritableWorkflow({
+  ...options,
+  approvalContext,
+} as InternalParallelExecutionOptions);
+
+/** Internal read-only helper for adaptive idempotency; omitted from package public exports. */
+export const inspectSettledWorkflowRun = (
+  definitionValue: unknown,
+  store: ExecutionJournalStore,
+): ExecutionRunResult | undefined => {
+  const plan = compileStaticExecutionPlan(definitionValue);
+  const definition = definitionValue as WorkflowDefinition;
+  const events = store.readEvents();
+  validateEventIdentity(events, plan, store.runId);
+  const last = events.at(-1);
+  const status = last?.type === 'run.paused' ? 'paused' : terminalStatus(last);
+  return status ? buildRunResult(definition, plan, store, events, status) : undefined;
 };
 
 /** Portable Phase 3 entrypoint; defaults to deterministic serial fallback. */

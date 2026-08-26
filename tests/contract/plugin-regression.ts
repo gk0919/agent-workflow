@@ -334,6 +334,7 @@ const packageBoundaryContract = (): void => {
   assert.ok(exportKeys.includes('./schemas/fake-executor-fixture.json'));
   assert.ok(exportKeys.includes('./schemas/workflow-definition.json'));
   assert.ok(exportKeys.includes('./schemas/workflow-definition-bundle.json'));
+  assert.ok(exportKeys.includes('./schemas/workflow-transition.json'));
   assert.ok(exportKeys.every((key) => !key.startsWith('./examples/')));
 };
 

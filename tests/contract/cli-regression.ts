@@ -35,6 +35,9 @@ export const main = (): number => {
     assert.match(help.stdout, /\n  execution:author:preview\n/);
     assert.match(help.stdout, /\n  execution:author:run\n/);
     assert.match(help.stdout, /\n  execution:author:test\n/);
+    assert.match(help.stdout, /\n  execution:adaptive:preview\n/);
+    assert.match(help.stdout, /\n  execution:adaptive:run\n/);
+    assert.match(help.stdout, /\n  execution:adaptive:test\n/);
     assert.match(help.stdout, /\n  execution:run\n/);
     assert.match(help.stdout, /\n  execution:parallel:run\n/);
     assert.match(help.stdout, /\n  execution:portability:test\n/);
@@ -52,6 +55,10 @@ export const main = (): number => {
     assert.equal(standaloneAuthorHelp.status, 0, standaloneAuthorHelp.stderr);
     assert.match(standaloneAuthorHelp.stdout, /execution:author:preview/);
     assert.match(standaloneAuthorHelp.stdout, /execution:author:migrate/);
+    const standaloneAdaptiveHelp = runCli(['execution:adaptive:preview', '--help'], tmpdir());
+    assert.equal(standaloneAdaptiveHelp.status, 0, standaloneAdaptiveHelp.stderr);
+    assert.match(standaloneAdaptiveHelp.stdout, /execution:adaptive:preview/);
+    assert.match(standaloneAdaptiveHelp.stdout, /execution:adaptive:run/);
 
     const unknown = runCli(['unknown-command']);
     assert.equal(unknown.status, 1);

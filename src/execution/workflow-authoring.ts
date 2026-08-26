@@ -14,6 +14,7 @@ import {
   type WorkflowExecutionApproval,
   type WorkflowExecutionLimits,
   type WorkflowExecutionMode,
+  type WorkflowRunTransitionContext,
   type WorkflowNode,
   type ExecutionRunResult,
 } from '../contracts/execution.js';
@@ -25,9 +26,9 @@ import {
 } from '../core/execution-plan.js';
 import { executionModePolicyFindings } from './execution-policy.js';
 import {
-  runParallelWorkflow,
-  runSerialWorkflow,
-  runWritableWorkflow,
+  runParallelWorkflowWithApprovalContext,
+  runSerialWorkflowWithApprovalContext,
+  runWritableWorkflowWithApprovalContext,
   type ParallelExecutionOptions,
 } from './serial-runner.js';
 
@@ -329,15 +330,18 @@ export const validateWorkflowExecutionApproval = (
 };
 
 export interface ApprovedWorkflowExecutionOptions
-  extends Omit<ParallelExecutionOptions, 'definition'> {
+  extends Omit<ParallelExecutionOptions, 'approvalContext' | 'definition'> {
   readonly approval: WorkflowExecutionApproval;
   readonly definition: unknown;
   readonly executionMode: WorkflowExecutionMode;
 }
 
-/** Recomputes the preview before any Journal write, then delegates to the existing Runner. */
-export const runApprovedWorkflow = async (
-  options: ApprovedWorkflowExecutionOptions,
+interface InternalApprovedWorkflowExecutionOptions extends ApprovedWorkflowExecutionOptions {
+  readonly transitionContext?: WorkflowRunTransitionContext;
+}
+
+const runApprovedWorkflowInternal = async (
+  options: InternalApprovedWorkflowExecutionOptions,
 ): Promise<ExecutionRunResult> => {
   const definition = parseWorkflowDefinitionOutput(options.definition);
   const preview = previewWorkflowDefinition(definition, options.executionMode);
@@ -345,14 +349,43 @@ export const runApprovedWorkflow = async (
   if (approvalFindings.length > 0) {
     throw new Error(`动态 Workflow 未获当前预览批准：\n- ${approvalFindings.join('\n- ')}`);
   }
-  const { approval: _approval, executionMode, ...executionOptions } = options;
-  const resolvedOptions = { ...executionOptions, definition };
+  const {
+    approval: _approval,
+    executionMode,
+    transitionContext,
+    ...executionOptions
+  } = options;
+  const approvalContext = {
+    executionMode,
+    previewHash: preview.previewHash,
+    schemaVersion: WORKFLOW_AUTHORING_SCHEMA_VERSION,
+    ...(transitionContext ? { transition: transitionContext } : {}),
+    workflowHash: preview.workflowHash,
+  };
+  const resolvedOptions: ParallelExecutionOptions = {
+    ...executionOptions,
+    definition,
+  };
   switch (executionMode) {
     case 'serial':
-      return await runSerialWorkflow(resolvedOptions);
+      return await runSerialWorkflowWithApprovalContext(resolvedOptions, approvalContext);
     case 'parallel-readonly':
-      return await runParallelWorkflow(resolvedOptions);
+      return await runParallelWorkflowWithApprovalContext(resolvedOptions, approvalContext);
     case 'writable-worktree':
-      return await runWritableWorkflow(resolvedOptions);
+      return await runWritableWorkflowWithApprovalContext(resolvedOptions, approvalContext);
   }
 };
+
+/** Recomputes the preview before any Journal write, then delegates to the existing Runner. */
+export const runApprovedWorkflow = async (
+  options: ApprovedWorkflowExecutionOptions,
+): Promise<ExecutionRunResult> => await runApprovedWorkflowInternal(options);
+
+/** Internal Phase 6 bridge; intentionally omitted from the package public exports. */
+export const runApprovedWorkflowWithTransitionContext = async (
+  options: ApprovedWorkflowExecutionOptions,
+  transitionContext: WorkflowRunTransitionContext,
+): Promise<ExecutionRunResult> => await runApprovedWorkflowInternal({
+  ...options,
+  transitionContext,
+});

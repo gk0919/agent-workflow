@@ -16,7 +16,7 @@
     "payload"
   ],
   "properties": {
-    "schemaVersion": {"const": 1},
+    "schemaVersion": {"enum": [1, 2]},
     "eventId": {
       "type": "string",
       "pattern": "^event-[a-z0-9]{16,64}$"
@@ -50,6 +50,7 @@
     "type": {
       "enum": [
         "run.created",
+        "run.plan-approved",
         "run.started",
         "node.scheduled",
         "node.started",
@@ -65,7 +66,8 @@
         "run.resumed",
         "run.cancelled",
         "run.completed",
-        "run.failed"
+        "run.failed",
+        "run.transitioned"
       ]
     },
     "nodeId": {
@@ -87,6 +89,37 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {"schemaVersion": {"const": 1}},
+        "required": ["schemaVersion"]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "enum": [
+              "run.created",
+              "run.started",
+              "node.scheduled",
+              "node.started",
+              "node.workspace-bound",
+              "node.effect-prepared",
+              "node.output-validated",
+              "node.effect-confirmed",
+              "node.completed",
+              "node.failed",
+              "node.retry-scheduled",
+              "run.checkpointed",
+              "run.paused",
+              "run.resumed",
+              "run.cancelled",
+              "run.completed",
+              "run.failed"
+            ]
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {

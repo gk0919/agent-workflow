@@ -27,6 +27,9 @@ const command = (script: string, prefixArguments: string[] = []): CommandTarget 
 const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'cli:test': command('dist/tests/contract/cli-regression.js'),
   'execution:plan': command('dist/src/core/execution-plan.js'),
+  'execution:adaptive:preview': command('dist/src/execution/adaptive-cli.js', ['preview']),
+  'execution:adaptive:run': command('dist/src/execution/adaptive-cli.js', ['run']),
+  'execution:adaptive:test': command('dist/tests/contract/adaptive-runtime-regression.js'),
   'execution:author:migrate': command('dist/src/execution/authoring-cli.js', ['migrate']),
   'execution:author:preview': command('dist/src/execution/authoring-cli.js', ['preview']),
   'execution:author:run': command('dist/src/execution/cli.js', ['approved-run']),

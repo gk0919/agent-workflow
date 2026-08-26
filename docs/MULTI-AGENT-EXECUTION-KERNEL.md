@@ -2,7 +2,7 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Phase 0、Phase 1、Phase 2、Phase 3、Phase 4、Phase 5 已实现 |
+| 状态 | Phase 0、Phase 1、Phase 2、Phase 3、Phase 4、Phase 5、Phase 6 已实现 |
 | 最近评审 | 2026-08-26 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
@@ -49,6 +49,7 @@ Phase 2 已增加稳定批次的只读并行调度、动态 map lane、失败隔
 Phase 3 已增加原生宿主 Adapter、独立进程 Executor、能力协商和串行降级；
 Phase 4 已增加写入 effect、Run/Node/Lane Worktree binding、Integrator 和副作用恢复协议；
 Phase 5 已增加模型/Builder 声明式 IR 作者入口、确定性批准预览和版本化 Definition Bundle。
+Phase 6 已增加 Checkpoint-bound Transition、父子 Run lineage、累计预算、批准 Journal 和幂等恢复。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
@@ -135,9 +136,11 @@ Workflow Definition 是版本化 JSON 公共契约。首版最小字段建议包
 | `reduce` | 使用确定性规则或专用 Agent 汇总 |
 | `gate` | 以确定性条件允许、阻断或暂停 |
 | `checkpoint` | 持久化并允许人工批准后继续 |
-| `subworkflow` | 调用已注册 Workflow，首版最多一层 |
 
 循环必须使用带 `maxIterations` 的受限节点，不能开放无界 `while`。节点间数据通过受限 JSON Pointer/结果引用传递，不能执行任意表达式。
+
+`subworkflow` 不作为可嵌套的 `WorkflowNode` 开放。Phase 6 使用 Checkpoint-bound Transition 创建
+独立 Child Run，并以累计深度预算约束父子链路，避免递归节点破坏单 Run 的静态 DAG 和恢复语义。
 
 ### 2. Compiler 与静态检查
 
@@ -594,6 +597,22 @@ Phase 4 的 `runWritableWorkflow` 和 `ExecutionWorkspaceService`。
 
 上述退出标准已满足。公共 API、CLI、批准边界和迁移规则见
 [`DYNAMIC-WORKFLOW-AUTHORING.md`](./DYNAMIC-WORKFLOW-AUTHORING.md)。
+
+### Phase 6：Adaptive Dynamic Runtime（已完成）
+
+交付：
+
+- Checkpoint 边界的运行时重规划，不修改正在执行的 DAG
+- `WorkflowTransitionRequest` Schema 和确定性 Transition Preview
+- Parent/Child Run lineage 与累计深度、Agent、时间、调用和写入预算
+- `WorkflowTransitionApproval` 绑定 Parent、Child、预算和执行模式
+- Parent 原子收口、Child 批准 Journal 与 start/resume 幂等恢复
+- 公共 API、Fake Executor CLI 和 Phase 6 回归
+
+退出标准：运行中产生的新计划只能在 Checkpoint 暂停后成为独立子 Run；Parent、Child、累计预算或
+模式发生变化时旧批准失效；同一 Parent 不会被两个不同 Transition 静默消费。
+
+实现和边界见 [`ADAPTIVE-WORKFLOW-RUNTIME.md`](./ADAPTIVE-WORKFLOW-RUNTIME.md)。
 
 ## 明确暂缓
 

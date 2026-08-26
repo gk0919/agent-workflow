@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/workflow-transition.schema.json",
+  "title": "Adaptive Workflow Transition Request",
+  "description": "Portable request to continue a checkpointed run as a separately approved child workflow.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "kind",
+    "transitionId",
+    "parent",
+    "executionMode",
+    "limits",
+    "definition"
+  ],
+  "properties": {
+    "$schema": {"type": "string", "maxLength": 500},
+    "schemaVersion": {"const": 1},
+    "kind": {"const": "workflow-transition"},
+    "transitionId": {"$ref": "#/$defs/identifier"},
+    "parent": {
+      "type": "object",
+      "required": ["runId", "workflowId", "workflowHash", "checkpointNodeId"],
+      "properties": {
+        "runId": {"type": "string", "pattern": "^run-[a-z0-9]{16,64}$"},
+        "workflowId": {"$ref": "#/$defs/identifier"},
+        "workflowHash": {"$ref": "#/$defs/sha256"},
+        "checkpointNodeId": {"$ref": "#/$defs/identifier"}
+      },
+      "additionalProperties": false
+    },
+    "executionMode": {
+      "enum": ["parallel-readonly", "serial", "writable-worktree"]
+    },
+    "limits": {
+      "type": "object",
+      "required": [
+        "maxDepth",
+        "maxTotalAgents",
+        "maxTotalDurationMs",
+        "maxTotalExecutorCalls",
+        "maxTotalExternalWrites"
+      ],
+      "properties": {
+        "maxDepth": {"type": "integer", "minimum": 1, "maximum": 16},
+        "maxTotalAgents": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "maxTotalDurationMs": {"type": "integer", "minimum": 1000, "maximum": 2147483647},
+        "maxTotalExecutorCalls": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "maxTotalExternalWrites": {"type": "integer", "minimum": 0, "maximum": 1000}
+      },
+      "additionalProperties": false
+    },
+    "definition": {
+      "$ref": "https://agent-workflow.local/schemas/workflow-definition.schema.json"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

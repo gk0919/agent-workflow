@@ -34,6 +34,7 @@ export type {
 export {
   AGENT_EXECUTOR_API_VERSION,
   EXECUTION_EVENT_SCHEMA_VERSION,
+  EXECUTION_EVENT_SCHEMA_VERSIONS,
   EXECUTION_EVENT_TYPES,
   FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION,
   WORKFLOW_AUTHORING_SCHEMA_VERSION,
@@ -42,6 +43,7 @@ export {
   WORKFLOW_DEFINITION_SCHEMA_VERSION,
   WORKFLOW_EXECUTION_MODES,
   WORKFLOW_NODE_TYPES,
+  WORKFLOW_TRANSITION_SCHEMA_VERSION,
 } from './execution.js';
 export type {
   AgentCancellationRequest,
@@ -89,6 +91,8 @@ export type {
   WorkflowAuthoringEffectPreview,
   WorkflowAuthoringPreview,
   WorkflowAuthoringRequirementsPreview,
+  WorkflowAdaptiveBudgetReservation,
+  WorkflowAdaptiveLimits,
   WorkflowDefinition,
   WorkflowDefinitionBundle,
   WorkflowDefinitionBundlePreviousVersion,
@@ -98,6 +102,13 @@ export type {
   WorkflowExecutionApproval,
   WorkflowExecutionLimits,
   WorkflowExecutionMode,
+  WorkflowRunApprovalContext,
+  WorkflowRunTransitionContext,
+  WorkflowTransitionApproval,
+  WorkflowTransitionParent,
+  WorkflowTransitionPreview,
+  WorkflowTransitionRequest,
+  WorkflowTransitionRunResult,
   WorkflowFailurePolicy,
   WorkflowGateCondition,
   WorkflowNode,

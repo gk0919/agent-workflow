@@ -49,3 +49,9 @@ agent-workflow execution:author:migrate \
 迁移只把已通过 Schema/语义校验的裸 Definition v1 包装为 Bundle v1，并记录 `source=migration`、
 Definition Hash 和版本。当前 Bundle v1 输入只做严格校验后原样规范化；未知未来版本不会被猜测迁移。
 保存和迁移命令拒绝覆盖已有输出文件，版本链需要显式提供前一版本号和 Definition Hash。
+
+## Workflow Transition v1
+
+Phase 6 新增 `./schemas/workflow-transition.json`，并把新写入的 Execution Event 升级为 v2，以增加
+`run.plan-approved` 和 `run.transitioned`。当前校验器同时接受 v1/v2，因此旧 Journal 无需迁移且可
+继续恢复；恢复后的新事件使用 v2。旧版只理解 v1 的宿主不得读取含 v2 事件的 Run。

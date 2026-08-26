@@ -14,6 +14,7 @@ import type {
   StaticExecutionPlanNode,
   WorkflowDefinition,
   WorkflowDefinitionBundle,
+  WorkflowTransitionRequest,
   WorkflowNode,
 } from '../contracts/execution.js';
 import { errorMessage } from '../types/guards.js';
@@ -125,6 +126,9 @@ const workflowDefinitionValidator = contractAjv.getSchema(
 ) as ValidateFunction<WorkflowDefinition>;
 const workflowDefinitionBundleValidator = contractAjv.compile<WorkflowDefinitionBundle>(
   readSchema('workflow-definition-bundle.schema.json'),
+);
+const workflowTransitionValidator = contractAjv.compile<WorkflowTransitionRequest>(
+  readSchema('workflow-transition.schema.json'),
 );
 const executionEventValidator = contractAjv.compile<ExecutionEvent>(
   readSchema('execution-event.schema.json'),
@@ -573,6 +577,21 @@ export const validateWorkflowDefinitionBundle = (value: unknown): string[] => {
   if (bundle.previousVersion && bundle.previousVersion.version >= bundle.version) {
     findings.push('$.previousVersion.version: 必须小于当前 version');
   }
+  return [...new Set(findings)].sort();
+};
+
+/** Validates the portable Phase 6 parent-to-child transition request contract. */
+export const validateWorkflowTransitionRequest = (value: unknown): string[] => {
+  const portableFinding = portableJsonFinding(value, MAX_DEFINITION_BUNDLE_BYTES);
+  if (portableFinding) {
+    return [`$: ${portableFinding}`];
+  }
+  if (!workflowTransitionValidator(value)) {
+    return formatAjvErrors(workflowTransitionValidator);
+  }
+  const request = value as WorkflowTransitionRequest;
+  const findings = validateWorkflowDefinition(request.definition).map((finding) =>
+    finding.startsWith('$') ? `$.definition${finding.slice(1)}` : `$.definition: ${finding}`);
   return [...new Set(findings)].sort();
 };
 
