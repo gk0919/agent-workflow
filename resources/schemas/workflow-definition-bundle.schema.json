@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/workflow-definition-bundle.schema.json",
+  "title": "Versioned Workflow Definition Bundle",
+  "description": "Portable saved envelope for declarative workflow definitions authored by a model, builder or human.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "kind",
+    "workflowId",
+    "version",
+    "source",
+    "definitionHash",
+    "definition"
+  ],
+  "properties": {
+    "$schema": {"type": "string", "maxLength": 500},
+    "schemaVersion": {"const": 1},
+    "kind": {"const": "workflow-definition-bundle"},
+    "workflowId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "version": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+    "source": {"enum": ["builder", "human", "migration", "model"]},
+    "definitionHash": {"$ref": "#/$defs/sha256"},
+    "previousVersion": {
+      "type": "object",
+      "required": ["version", "definitionHash"],
+      "properties": {
+        "version": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "definitionHash": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "definition": {
+      "$ref": "https://agent-workflow.local/schemas/workflow-definition.schema.json"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}

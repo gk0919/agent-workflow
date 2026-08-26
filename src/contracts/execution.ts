@@ -6,6 +6,8 @@ import type { PluginJsonObject, PluginJsonValue } from './json.js';
 import type { PluginPermission } from './plugin.js';
 
 export const WORKFLOW_DEFINITION_SCHEMA_VERSION = 1 as const;
+export const WORKFLOW_DEFINITION_BUNDLE_SCHEMA_VERSION = 1 as const;
+export const WORKFLOW_AUTHORING_SCHEMA_VERSION = 1 as const;
 export const EXECUTION_EVENT_SCHEMA_VERSION = 1 as const;
 export const AGENT_EXECUTOR_API_VERSION = 1 as const;
 export const FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION = 1 as const;
@@ -21,6 +23,21 @@ export const WORKFLOW_NODE_TYPES = [
   'reduce',
 ] as const;
 export type WorkflowNodeType = typeof WORKFLOW_NODE_TYPES[number];
+
+export const WORKFLOW_EXECUTION_MODES = [
+  'parallel-readonly',
+  'serial',
+  'writable-worktree',
+] as const;
+export type WorkflowExecutionMode = typeof WORKFLOW_EXECUTION_MODES[number];
+
+export const WORKFLOW_DEFINITION_SOURCES = [
+  'builder',
+  'human',
+  'migration',
+  'model',
+] as const;
+export type WorkflowDefinitionSource = typeof WORKFLOW_DEFINITION_SOURCES[number];
 
 export const EXECUTION_EVENT_TYPES = [
   'run.created',
@@ -170,6 +187,24 @@ export interface WorkflowDefinition {
   readonly nodes: readonly WorkflowNode[];
   readonly resultNode: string;
   readonly schemaVersion: typeof WORKFLOW_DEFINITION_SCHEMA_VERSION;
+}
+
+export interface WorkflowDefinitionBundlePreviousVersion {
+  readonly definitionHash: string;
+  readonly version: number;
+}
+
+/** Portable saved form for versioning model-, builder- or human-authored definitions. */
+export interface WorkflowDefinitionBundle {
+  readonly $schema?: string;
+  readonly definition: WorkflowDefinition;
+  readonly definitionHash: string;
+  readonly kind: 'workflow-definition-bundle';
+  readonly previousVersion?: WorkflowDefinitionBundlePreviousVersion;
+  readonly schemaVersion: typeof WORKFLOW_DEFINITION_BUNDLE_SCHEMA_VERSION;
+  readonly source: WorkflowDefinitionSource;
+  readonly version: number;
+  readonly workflowId: string;
 }
 
 export interface ExecutionEvent {
@@ -410,6 +445,59 @@ export interface StaticExecutionPlan {
   readonly schemaVersion: 1;
   readonly workflowHash: string;
   readonly workflowId: string;
+}
+
+export interface WorkflowAuthoringBudgetPreview {
+  readonly declared: WorkflowExecutionLimits;
+  readonly maxEffectInvocations: number;
+  readonly maxExecutorCalls: number;
+  readonly maxLayerWidth: number;
+  readonly nodeCount: number;
+}
+
+export interface WorkflowAuthoringCheckpointPreview {
+  readonly id: string;
+  readonly summary: string;
+}
+
+export interface WorkflowAuthoringEffectPreview {
+  readonly approvalCheckpoint: string;
+  readonly kind: WorkflowEffectKind;
+  readonly maxInvocations: number;
+  readonly nodeId: string;
+  readonly ownedPaths?: readonly string[];
+  readonly repository?: string;
+  readonly resourceLocks?: readonly string[];
+}
+
+export interface WorkflowAuthoringRequirementsPreview {
+  readonly permissions: readonly PluginPermission[];
+  readonly preferredCapabilities: readonly string[];
+  readonly repositories: readonly string[];
+  readonly requiredCapabilities: readonly string[];
+  readonly writable: boolean;
+}
+
+/** Deterministic approval surface derived from validated declarative IR. */
+export interface WorkflowAuthoringPreview {
+  readonly budget: WorkflowAuthoringBudgetPreview;
+  readonly checkpoints: readonly WorkflowAuthoringCheckpointPreview[];
+  readonly effects: readonly WorkflowAuthoringEffectPreview[];
+  readonly executionMode: WorkflowExecutionMode;
+  readonly plan: StaticExecutionPlan;
+  readonly previewHash: string;
+  readonly requirements: WorkflowAuthoringRequirementsPreview;
+  readonly schemaVersion: typeof WORKFLOW_AUTHORING_SCHEMA_VERSION;
+  readonly workflowHash: string;
+  readonly workflowId: string;
+}
+
+/** Host-issued receipt proving that the exact preview was approved before execution. */
+export interface WorkflowExecutionApproval {
+  readonly executionMode: WorkflowExecutionMode;
+  readonly previewHash: string;
+  readonly schemaVersion: typeof WORKFLOW_AUTHORING_SCHEMA_VERSION;
+  readonly workflowHash: string;
 }
 
 export interface ExecutionArtifactReference {

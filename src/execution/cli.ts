@@ -10,7 +10,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import type { ExecutionControlResult, ExecutionRunResult } from '../contracts/execution.js';
+import {
+  WORKFLOW_AUTHORING_SCHEMA_VERSION,
+  type ExecutionControlResult,
+  type ExecutionRunResult,
+} from '../contracts/execution.js';
 import { serializeCanonicalJson } from '../core/execution-plan.js';
 import { errorMessage } from '../types/guards.js';
 import { FakeAgentExecutor } from './fake-executor.js';
@@ -21,9 +25,13 @@ import {
   runParallelWorkflow,
   runSerialWorkflow,
 } from './serial-runner.js';
+import {
+  previewWorkflowDefinition,
+  runApprovedWorkflow,
+} from './workflow-authoring.js';
 
 const MAX_JSON_FILE_BYTES = 256 * 1024;
-type ExecutionAction = 'cancel' | 'pause' | 'resume' | 'run';
+type ExecutionAction = 'approved-run' | 'cancel' | 'pause' | 'resume' | 'run';
 
 const resolveWorkspaceJson = (workspaceRoot: string, requestedPath: string): string => {
   if (!requestedPath || path.isAbsolute(requestedPath) || path.win32.isAbsolute(requestedPath)) {
@@ -86,6 +94,7 @@ const printUsage = (): void => {
     '  agent-workflow execution:resume --file <workflow.json> --fixture <fake.json> --run-id <id> [--scheduler serial|parallel] [--input <input.json>] [--approve <node-id>] [--format text|json]',
     '  agent-workflow execution:parallel:run --file <workflow.json> --fixture <fake.json> [--input <input.json>] [--run-id <id>] [--format text|json]',
     '  agent-workflow execution:parallel:resume --file <workflow.json> --fixture <fake.json> --run-id <id> [--input <input.json>] [--approve <node-id>] [--format text|json]',
+    '  agent-workflow execution:author:run --file <definition-or-bundle.json> --fixture <fake.json> --approval <preview-hash> [--scheduler serial|parallel] [--input <input.json>] [--run-id <id>] [--format text|json]',
     '  agent-workflow execution:pause --run-id <id> [--format text|json]',
     '  agent-workflow execution:cancel --run-id <id> [--format text|json]',
     '',
@@ -123,6 +132,7 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
       allowPositionals: true,
       options: {
         approve: { type: 'string', multiple: true },
+        approval: { type: 'string' },
         file: { type: 'string' },
         fixture: { type: 'string' },
         format: { type: 'string', default: 'text' },
@@ -138,7 +148,7 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
       return 0;
     }
     const action = parsed.positionals[0] as ExecutionAction | undefined;
-    if (!action || !['cancel', 'pause', 'resume', 'run'].includes(action)) {
+    if (!action || !['approved-run', 'cancel', 'pause', 'resume', 'run'].includes(action)) {
       throw new Error('缺少或不支持 execution action');
     }
     if (parsed.positionals.length !== 1) {
@@ -170,6 +180,9 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
     if (!parsed.values.file || !parsed.values.fixture) {
       throw new Error(`${action} 必须提供 --file 和 --fixture`);
     }
+    if (action === 'approved-run' && !parsed.values.approval) {
+      throw new Error('approved-run 必须提供 --approval <preview-hash>');
+    }
     if (action === 'resume' && !parsed.values['run-id']) {
       throw new Error('resume 必须提供 --run-id');
     }
@@ -179,22 +192,54 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
       ? readWorkspaceJson(workspaceRoot, parsed.values.input)
       : null;
     const executor = new FakeAgentExecutor(fixture);
+    const approvedContext = action === 'approved-run'
+      ? (() => {
+        const executionMode = parsed.values.scheduler === 'parallel'
+          ? 'parallel-readonly' as const
+          : 'serial' as const;
+        const preview = previewWorkflowDefinition(definition, executionMode);
+        if (parsed.values.approval !== preview.previewHash) {
+          throw new Error('approved-run 的 --approval 与当前静态预览不一致');
+        }
+        return {
+          approval: {
+            executionMode,
+            previewHash: parsed.values.approval,
+            schemaVersion: WORKFLOW_AUTHORING_SCHEMA_VERSION,
+            workflowHash: preview.workflowHash,
+          },
+          executionMode,
+        };
+      })()
+      : undefined;
     const store = new FileExecutionJournalStore(executionsRoot, runId, {
-      create: action === 'run',
+      create: action === 'run' || action === 'approved-run',
     });
-    const runWorkflow = parsed.values.scheduler === 'parallel'
-      ? runParallelWorkflow
-      : runSerialWorkflow;
-    const result = await runWorkflow({
+    const commonOptions = {
       approvedCheckpoints: parsed.values.approve ?? [],
       definition,
       executor,
       input,
-      mode: action === 'run' ? 'start' : 'resume',
+      mode: action === 'resume' ? 'resume' as const : 'start' as const,
       store,
-    });
-    outputResult(result, parsed.values.format);
-    return result.status === 'failed' ? 1 : 0;
+    };
+    const runApproved = () => {
+      if (!approvedContext) {
+        throw new Error('approved-run 缺少已校验的批准上下文');
+      }
+      return runApprovedWorkflow({
+        ...commonOptions,
+        ...approvedContext,
+      });
+    };
+    const result = action === 'approved-run'
+      ? runApproved()
+      : (parsed.values.scheduler === 'parallel'
+        ? runParallelWorkflow(commonOptions)
+        : runSerialWorkflow(commonOptions));
+    const resolvedResult = await result;
+    outputResult(resolvedResult, parsed.values.format);
+    return resolvedResult.status === 'failed' ? 1 : 0;
   } catch (error: unknown) {
     process.stderr.write(`Execution ${errorMessage(error)}\n`);
     return 1;

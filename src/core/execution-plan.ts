@@ -13,11 +13,13 @@ import type {
   StaticExecutionPlan,
   StaticExecutionPlanNode,
   WorkflowDefinition,
+  WorkflowDefinitionBundle,
   WorkflowNode,
 } from '../contracts/execution.js';
 import { errorMessage } from '../types/guards.js';
 
 const MAX_DEFINITION_BYTES = 256 * 1024;
+const MAX_DEFINITION_BUNDLE_BYTES = 512 * 1024;
 const MAX_EVENT_BYTES = 256 * 1024;
 const MAX_EMBEDDED_SCHEMA_BYTES = 32 * 1024;
 const MAX_JSON_DEPTH = 64;
@@ -116,8 +118,13 @@ const readSchema = (name: string): JsonRecord => JSON.parse(
 ) as JsonRecord;
 
 const contractAjv = createAjv();
-const workflowDefinitionValidator = contractAjv.compile<WorkflowDefinition>(
-  readSchema('workflow-definition.schema.json'),
+const workflowDefinitionSchema = readSchema('workflow-definition.schema.json');
+contractAjv.addSchema(workflowDefinitionSchema);
+const workflowDefinitionValidator = contractAjv.getSchema(
+  'https://agent-workflow.local/schemas/workflow-definition.schema.json',
+) as ValidateFunction<WorkflowDefinition>;
+const workflowDefinitionBundleValidator = contractAjv.compile<WorkflowDefinitionBundle>(
+  readSchema('workflow-definition-bundle.schema.json'),
 );
 const executionEventValidator = contractAjv.compile<ExecutionEvent>(
   readSchema('execution-event.schema.json'),
@@ -198,6 +205,13 @@ export const hashPortableJson = (
     throw new Error(`JSON 值无效：${finding}`);
   }
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
+};
+
+const workflowDefinitionHash = (definition: WorkflowDefinition): string => {
+  const hashInput = Object.fromEntries(
+    Object.entries(definition).filter(([key]) => key !== '$schema'),
+  );
+  return createHash('sha256').update(canonicalJson(hashInput)).digest('hex');
 };
 
 const findNonLocalReference = (value: unknown, location = '$'): string | undefined => {
@@ -539,6 +553,29 @@ export const validateWorkflowDefinition = (value: unknown): string[] => {
   return semanticFindings(value as WorkflowDefinition);
 };
 
+export const validateWorkflowDefinitionBundle = (value: unknown): string[] => {
+  const portableFinding = portableJsonFinding(value, MAX_DEFINITION_BUNDLE_BYTES);
+  if (portableFinding) {
+    return [`$: ${portableFinding}`];
+  }
+  if (!workflowDefinitionBundleValidator(value)) {
+    return formatAjvErrors(workflowDefinitionBundleValidator);
+  }
+  const bundle = value as WorkflowDefinitionBundle;
+  const findings = validateWorkflowDefinition(bundle.definition).map((finding) =>
+    finding.startsWith('$') ? `$.definition${finding.slice(1)}` : `$.definition: ${finding}`);
+  if (bundle.workflowId !== bundle.definition.id) {
+    findings.push('$.workflowId: 必须与 definition.id 一致');
+  }
+  if (bundle.definitionHash !== workflowDefinitionHash(bundle.definition)) {
+    findings.push('$.definitionHash: 必须与 definition 内容哈希一致');
+  }
+  if (bundle.previousVersion && bundle.previousVersion.version >= bundle.version) {
+    findings.push('$.previousVersion.version: 必须小于当前 version');
+  }
+  return [...new Set(findings)].sort();
+};
+
 export const validateExecutionEvent = (value: unknown): string[] => {
   const portableFinding = portableJsonFinding(value, MAX_EVENT_BYTES);
   if (portableFinding) {
@@ -611,10 +648,7 @@ export const compileStaticExecutionPlan = (value: unknown): StaticExecutionPlan 
       type: node.type,
     }))
     .sort((left, right) => left.layer - right.layer || compareStrings(left.id, right.id));
-  const hashInput = Object.fromEntries(
-    Object.entries(definition).filter(([key]) => key !== '$schema'),
-  );
-  const workflowHash = createHash('sha256').update(canonicalJson(hashInput)).digest('hex');
+  const workflowHash = workflowDefinitionHash(definition);
   return Object.freeze({
     layers: Object.freeze(layers.map((layer) => Object.freeze([...layer]))),
     limits: Object.freeze({

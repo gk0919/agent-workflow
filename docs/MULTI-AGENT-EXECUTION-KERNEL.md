@@ -2,8 +2,8 @@
 
 | 属性 | 值 |
 |---|---|
-| 状态 | Phase 0、Phase 1、Phase 2、Phase 3、Phase 4 已实现；Phase 5 仍为 Proposed |
-| 最近评审 | 2026-08-25 |
+| 状态 | Phase 0、Phase 1、Phase 2、Phase 3、Phase 4、Phase 5 已实现 |
+| 最近评审 | 2026-08-26 |
 | 适用范围 | `agent-workflow` 通用包与宿主适配器 |
 | 兼容策略 | 可选、渐进、串行可降级，不改变现有 Route 与任务产物语义 |
 
@@ -47,7 +47,8 @@
 Phase 1 已增加确定性串行 Runner、File Journal、内容寻址 Artifact 和 Fake Executor；
 Phase 2 已增加稳定批次的只读并行调度、动态 map lane、失败隔离和确定性归约；
 Phase 3 已增加原生宿主 Adapter、独立进程 Executor、能力协商和串行降级；
-Phase 4 已增加写入 effect、Run/Node/Lane Worktree binding、Integrator 和副作用恢复协议。
+Phase 4 已增加写入 effect、Run/Node/Lane Worktree binding、Integrator 和副作用恢复协议；
+Phase 5 已增加模型/Builder 声明式 IR 作者入口、确定性批准预览和版本化 Definition Bundle。
 
 | 现有能力 | 可复用职责 | 仍需新增 |
 |---|---|---|
@@ -565,7 +566,7 @@ Phase 4 的 `runWritableWorkflow` 和 `ExecutionWorkspaceService`。
 上述退出标准已满足。公共接入、Definition 约束、恢复矩阵和宿主安全边界见
 [`WRITABLE-EXECUTION.md`](./WRITABLE-EXECUTION.md)。
 
-### Phase 5：动态作者体验
+### Phase 5：动态作者体验（已完成）
 
 交付：
 
@@ -576,6 +577,23 @@ Phase 4 的 `runWritableWorkflow` 和 `ExecutionWorkspaceService`。
 - Workflow 保存、版本和迁移工具
 
 退出标准：模型输出始终先经过 Schema 与策略校验；未经批准的拓扑、权限或预算变化不能运行。
+
+实现：
+
+- `parseWorkflowDefinitionOutput` 只接受 JSON Definition/Bundle，模型文本必须先经过 Definition
+  Schema、DAG 语义和执行模式策略；Markdown、任意 JavaScript 和未知字段不会进入执行边界。
+- `previewWorkflowDefinition` 输出确定性 Plan、预算上界、权限、capability、repository、Checkpoint
+  和 effect，并把执行模式与完整预览绑定到 `previewHash`。
+- `runApprovedWorkflow` 在 Journal 写入前重新生成预览并严格核对 `WorkflowExecutionApproval`；拓扑、
+  Prompt、权限、预算、effect、Workspace 或模式变化都会使批准失效，Checkpoint Approval 仍独立生效。
+- `WorkflowDefinitionBuilder` 只有 IR 构建能力；不包含 Runner、工具调用、文件写入或动态代码加载。
+- `WorkflowDefinitionBundle` Schema v1、公共创建/加载/迁移 API 与 `execution:author:*` CLI 提供
+  preview、save、migrate 和 approved run；保存拒绝静默覆盖，裸 Definition v1 可迁移为 Bundle v1。
+- `execution:author:test` 覆盖模型输出、静态预览、批准漂移、无 Journal 写入拒绝、Builder、Bundle
+  Hash/版本/迁移和 CLI。
+
+上述退出标准已满足。公共 API、CLI、批准边界和迁移规则见
+[`DYNAMIC-WORKFLOW-AUTHORING.md`](./DYNAMIC-WORKFLOW-AUTHORING.md)。
 
 ## 明确暂缓
 

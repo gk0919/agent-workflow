@@ -3,7 +3,11 @@ export {
   EXECUTION_EVENT_SCHEMA_VERSION,
   EXECUTION_EVENT_TYPES,
   FAKE_EXECUTOR_FIXTURE_SCHEMA_VERSION,
+  WORKFLOW_AUTHORING_SCHEMA_VERSION,
+  WORKFLOW_DEFINITION_BUNDLE_SCHEMA_VERSION,
+  WORKFLOW_DEFINITION_SOURCES,
   WORKFLOW_DEFINITION_SCHEMA_VERSION,
+  WORKFLOW_EXECUTION_MODES,
   WORKFLOW_NODE_TYPES,
 } from '../contracts/execution.js';
 export {
@@ -61,10 +65,20 @@ export type {
   StaticExecutionPlan,
   StaticExecutionPlanNode,
   ReduceWorkflowNode,
+  WorkflowAuthoringBudgetPreview,
+  WorkflowAuthoringCheckpointPreview,
+  WorkflowAuthoringEffectPreview,
+  WorkflowAuthoringPreview,
+  WorkflowAuthoringRequirementsPreview,
   WorkflowDefinition,
+  WorkflowDefinitionBundle,
+  WorkflowDefinitionBundlePreviousVersion,
+  WorkflowDefinitionSource,
   WorkflowEffectKind,
   WorkflowEffectRequirement,
+  WorkflowExecutionApproval,
   WorkflowExecutionLimits,
+  WorkflowExecutionMode,
   WorkflowFailurePolicy,
   WorkflowGateCondition,
   WorkflowNode,
@@ -94,6 +108,7 @@ export {
   validateExecutionEvent,
   validateJsonValue,
   validateWorkflowDefinition,
+  validateWorkflowDefinitionBundle,
 } from '../core/execution-plan.js';
 export {
   negotiateExecutorCapabilities,
@@ -138,3 +153,19 @@ export type {
   SerialExecutionOptions,
   WritableExecutionOptions,
 } from './serial-runner.js';
+export {
+  createWorkflowDefinitionBundle,
+  loadWorkflowDefinitionBundle,
+  migrateWorkflowDefinitionArtifact,
+  parseWorkflowDefinitionOutput,
+  previewWorkflowDefinition,
+  runApprovedWorkflow,
+  validateWorkflowExecutionApproval,
+  WorkflowDefinitionBuilder,
+} from './workflow-authoring.js';
+export type {
+  ApprovedWorkflowExecutionOptions,
+  CreateWorkflowDefinitionBundleOptions,
+  MigrateWorkflowDefinitionOptions,
+  WorkflowDefinitionBuilderOptions,
+} from './workflow-authoring.js';

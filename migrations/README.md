@@ -32,3 +32,20 @@ Artifact 或任务级 worktree state，因此旧 Workflow 和旧 Run 不需要�
 `runWritableWorkflow`、提供 `ExecutionWorkspaceService` 并重新通过 Definition 校验后，才会创建
 新状态。该状态包含 host-local 绝对路径，不得复制到其他宿主；需要迁移机器时应保留 Portable
 Journal/Artifact，重新创建 Run，而不是改写 state 中的路径。
+
+## Workflow Definition Bundle v1
+
+Phase 5 新增 `./schemas/workflow-definition-bundle.json`，作为模型、Builder 或人工作者 Definition 的
+版本化保存信封。它不会替换 Workflow Definition v1，旧 Definition、Run、Event 和 Artifact 不需要
+迁移，Phase 0–4 Runner 继续直接接受 Definition v1。
+
+需要版本保存时运行：
+
+```text
+agent-workflow execution:author:migrate \
+  --file <legacy-definition.json> --output <bundle-v1.json> [--version <n>]
+```
+
+迁移只把已通过 Schema/语义校验的裸 Definition v1 包装为 Bundle v1，并记录 `source=migration`、
+Definition Hash 和版本。当前 Bundle v1 输入只做严格校验后原样规范化；未知未来版本不会被猜测迁移。
+保存和迁移命令拒绝覆盖已有输出文件，版本链需要显式提供前一版本号和 Definition Hash。

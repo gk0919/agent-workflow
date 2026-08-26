@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { PluginJsonObject, PluginJsonValue } from '../contracts/json.js';
-import type { PluginPermission } from '../contracts/plugin.js';
 import {
   AGENT_EXECUTOR_API_VERSION,
   EXECUTION_EVENT_SCHEMA_VERSION,
@@ -41,6 +40,7 @@ import {
 import { errorMessage } from '../types/guards.js';
 import { negotiateExecutorCapabilities } from './capability-negotiation.js';
 import { calculateExecutionEventHash } from './file-journal.js';
+import { executionModePolicyFindings } from './execution-policy.js';
 
 const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024;
 const DEFAULT_MAX_TOOL_CALLS = 50;
@@ -48,10 +48,6 @@ const EXECUTION_CONTROL_POLL_MS = 100;
 const EXECUTOR_CANCEL_GRACE_MS = 1000;
 const compareStrings = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
-const SAFE_READONLY_PERMISSIONS = new Set<PluginPermission>([
-  'artifact:read',
-  'workspace:read',
-]);
 const TERMINAL_EVENT_TYPES = new Set<ExecutionEventType>([
   'run.cancelled',
   'run.completed',
@@ -286,100 +282,6 @@ class EventWriter {
     return persisted.slice(previousLength);
   }
 }
-
-const phaseOnePolicyFindings = (definition: WorkflowDefinition): string[] => {
-  const findings: string[] = [];
-  if (definition.limits.maxExternalWrites !== 0) {
-    findings.push('Phase 1 要求 limits.maxExternalWrites 为 0');
-  }
-  for (const node of definition.nodes) {
-    if (
-      node.type === 'integrator' ||
-      node.type === 'map' ||
-      node.type === 'parallel' ||
-      node.type === 'reduce'
-    ) {
-      findings.push(`节点 ${node.id}：Phase 1 不支持 ${node.type} 节点`);
-      continue;
-    }
-    if (node.type !== 'agent') {
-      continue;
-    }
-    if (node.workspace?.mode === 'exclusive-worktree') {
-      findings.push(`节点 ${node.id}：Phase 1 不支持可写或独占 Worktree`);
-    }
-    if (node.workspace?.repository) {
-      findings.push(`节点 ${node.id}：Phase 1 尚未开放 repository binding`);
-    }
-    const unsafePermissions = (node.permissions ?? [])
-      .filter((permission) => !SAFE_READONLY_PERMISSIONS.has(permission))
-      .sort();
-    if (unsafePermissions.length > 0) {
-      findings.push(`节点 ${node.id}：Phase 1 不允许权限 ${unsafePermissions.join(', ')}`);
-    }
-  }
-  return findings.sort();
-};
-
-const phaseTwoPolicyFindings = (definition: WorkflowDefinition): string[] => {
-  const findings: string[] = [];
-  if (definition.limits.maxExternalWrites !== 0) {
-    findings.push('Phase 2 要求 limits.maxExternalWrites 为 0');
-  }
-  for (const node of definition.nodes) {
-    if (node.type === 'integrator') {
-      findings.push(`节点 ${node.id}：Phase 2 不支持 integrator 节点`);
-      continue;
-    }
-    if (node.type !== 'agent' && node.type !== 'map') {
-      continue;
-    }
-    if (node.workspace?.mode === 'exclusive-worktree') {
-      findings.push(`节点 ${node.id}：Phase 2 只允许共享只读 Workspace`);
-    }
-    if (node.workspace?.repository) {
-      findings.push(`节点 ${node.id}：Phase 2 尚未开放 repository binding`);
-    }
-    const unsafePermissions = (node.permissions ?? [])
-      .filter((permission) => !SAFE_READONLY_PERMISSIONS.has(permission))
-      .sort();
-    if (unsafePermissions.length > 0) {
-      findings.push(`节点 ${node.id}：Phase 2 不允许权限 ${unsafePermissions.join(', ')}`);
-    }
-  }
-  return findings.sort();
-};
-
-const phaseFourPolicyFindings = (definition: WorkflowDefinition): string[] => {
-  const findings: string[] = [];
-  for (const node of definition.nodes) {
-    if (node.type !== 'agent' && node.type !== 'map') {
-      continue;
-    }
-    if (!node.effect) {
-      if (node.workspace?.mode === 'exclusive-worktree' || node.workspace?.repository) {
-        findings.push(`节点 ${node.id}：无 effect 的节点只能使用共享只读 Workspace`);
-      }
-      const unsafePermissions = (node.permissions ?? [])
-        .filter((permission) => !SAFE_READONLY_PERMISSIONS.has(permission))
-        .sort();
-      if (unsafePermissions.length > 0) {
-        findings.push(`节点 ${node.id}：无 effect 时不允许权限 ${unsafePermissions.join(', ')}`);
-      }
-      continue;
-    }
-    if (node.failurePolicy === 'isolate') {
-      findings.push(`节点 ${node.id}：写入 effect 不允许 failurePolicy isolate`);
-    }
-    if (
-      node.effect.kind === 'external-write' &&
-      (node.workspace?.mode === 'exclusive-worktree' || node.workspace?.repository)
-    ) {
-      findings.push(`节点 ${node.id}：external-write 不能声明 repository Workspace`);
-    }
-  }
-  return findings.sort();
-};
 
 const capabilityStructureFinding = (value: unknown): string | undefined => {
   try {
@@ -1116,7 +1018,7 @@ const runSerialWorkflowInternal = async (
 ): Promise<ExecutionRunResult> => {
   const plan = compileStaticExecutionPlan(options.definition);
   const definition = options.definition as WorkflowDefinition;
-  const policyFindings = phaseOnePolicyFindings(definition);
+  const policyFindings = executionModePolicyFindings(definition, 'serial');
   if (policyFindings.length > 0) {
     throw new Error(`Phase 1 执行策略拒绝：\n- ${policyFindings.join('\n- ')}`);
   }
@@ -2496,9 +2398,7 @@ const runParallelWorkflowInternal = async (
 ): Promise<ExecutionRunResult> => {
   const plan = compileStaticExecutionPlan(options.definition);
   const definition = options.definition as WorkflowDefinition;
-  const policyFindings = executionMode === 'writable-worktree'
-    ? phaseFourPolicyFindings(definition)
-    : phaseTwoPolicyFindings(definition);
+  const policyFindings = executionModePolicyFindings(definition, executionMode);
   if (policyFindings.length > 0) {
     const phase = executionMode === 'writable-worktree' ? 'Phase 4' : 'Phase 2';
     throw new Error(`${phase} 执行策略拒绝：\n- ${policyFindings.join('\n- ')}`);

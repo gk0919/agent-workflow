@@ -32,6 +32,9 @@ export const main = (): number => {
     assert.match(help.stdout, /Usage: agent-workflow <command>/);
     assert.match(help.stdout, /\n  init\n/);
     assert.match(help.stdout, /\n  execution:plan\n/);
+    assert.match(help.stdout, /\n  execution:author:preview\n/);
+    assert.match(help.stdout, /\n  execution:author:run\n/);
+    assert.match(help.stdout, /\n  execution:author:test\n/);
     assert.match(help.stdout, /\n  execution:run\n/);
     assert.match(help.stdout, /\n  execution:parallel:run\n/);
     assert.match(help.stdout, /\n  execution:portability:test\n/);
@@ -45,6 +48,10 @@ export const main = (): number => {
     assert.equal(standaloneRunHelp.status, 0, standaloneRunHelp.stderr);
     assert.match(standaloneRunHelp.stdout, /execution:resume/);
     assert.match(standaloneRunHelp.stdout, /--scheduler serial\|parallel/);
+    const standaloneAuthorHelp = runCli(['execution:author:preview', '--help'], tmpdir());
+    assert.equal(standaloneAuthorHelp.status, 0, standaloneAuthorHelp.stderr);
+    assert.match(standaloneAuthorHelp.stdout, /execution:author:preview/);
+    assert.match(standaloneAuthorHelp.stdout, /execution:author:migrate/);
 
     const unknown = runCli(['unknown-command']);
     assert.equal(unknown.status, 1);

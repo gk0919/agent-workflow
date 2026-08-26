@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 完成多 Agent 执行内核 Phase 5：模型/Builder 声明式 IR、静态图/预算/权限预览、哈希绑定批准后执行，以及 Workflow Definition Bundle 保存、版本和迁移工具。
 - 修复 Micro Change Source Gate 在 Windows 上通过同步 stdin 校验中文补丁时可能超时并误报 patch mismatch；Git 改读受控临时文件，并正确解码 Git 引号路径。
 - 完成多 Agent 执行内核 Phase 4：显式写入 effect、Approval、Run/Node/Lane 隔离 Worktree、文件 ownership/资源锁、Integrator、合并后验证和副作用恢复协议。
 - 增加 `agent-workflow init`，安全生成宿主配置、Profile 覆盖层、目录、根入口、忽略规则和 npm scripts。
