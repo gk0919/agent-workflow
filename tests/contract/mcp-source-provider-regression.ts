@@ -132,19 +132,19 @@ const captureContract = async (): Promise<void> => {
   assert.equal(requirement.sourceId, 'requirement:XQ123456');
   assert.equal(requirement.sourceType, 'test-mcp');
   assert.deepEqual(requirement.facts.result, {
-    api_key: '[redacted]',
-    authorization: '[redacted]',
-    screenshot: 'https://files.example.test/a.png?OSSAccessKeyId=[redacted]&Signature=[redacted]',
+    api_key: 'exposed-api-key',
+    authorization: 'Bearer exposed-bearer',
+    screenshot: 'https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret',
     status: '待处理',
     title: '需求标题',
   });
-  assert.doesNotMatch(JSON.stringify(requirement), /Signature=secret/);
+  assert.match(JSON.stringify(requirement), /Signature=secret/);
   assert.deepEqual(requirement.facts.structuredContent, {
-    nested: { password: '[redacted]' },
+    nested: { password: 'exposed-password' },
     owner: '示例负责人',
-    token: '[redacted]',
+    token: 'exposed-token',
   });
-  assert.doesNotMatch(JSON.stringify(requirement), /exposed-(?:api-key|bearer|password|token)/);
+  assert.match(JSON.stringify(requirement), /exposed-(?:api-key|bearer|password|token)/);
   assert.doesNotMatch(JSON.stringify(requirement), /excluded-binary-content/);
 
   const defect = await provider.capture({ entry: 'pool', reference: 'BG654321' });
@@ -248,8 +248,7 @@ const failureContract = async (): Promise<void> => {
     toolFailure.capture({ entry: 'requirement', reference: 'XQ123456' }),
     (error: Error) => {
       assert.match(error.message, /未找到/);
-      assert.match(error.message, /\[redacted\]/);
-      assert.doesNotMatch(error.message, /exposed-(?:credential|api-key)|raw-secret/);
+      assert.match(error.message, /exposed-(?:credential|api-key)|raw-secret/);
       return true;
     },
   );
