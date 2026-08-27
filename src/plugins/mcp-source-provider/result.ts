@@ -2,9 +2,10 @@ import type { PluginJsonValue } from '../../contracts/json.js';
 import type { SourceCaptureResult } from '../../contracts/capabilities.js';
 
 export interface McpSourceToolResult {
-  readonly content?: unknown;
-  readonly isError?: boolean;
-  readonly structuredContent?: unknown;
+  readonly [key: string]: unknown;
+  readonly content?: unknown | undefined;
+  readonly isError?: boolean | undefined;
+  readonly structuredContent?: unknown | undefined;
 }
 
 export interface SourceResultContext {
@@ -93,6 +94,12 @@ const parseText = (value: string): unknown => {
   }
 };
 
+const createSanitizationState = (maxTextChars: number): SanitizationState => ({
+  remainingNodes: 1_000,
+  remainingTextChars: maxTextChars,
+  seen: new WeakSet(),
+});
+
 /** 把不可信 MCP 结果转换成有界且仅含 JSON 的工作流事实。 */
 export const toSourceCaptureResult = (
   result: McpSourceToolResult,
@@ -104,22 +111,32 @@ export const toSourceCaptureResult = (
       'MCP 工具返回 isError=true';
     throw new Error(`MCP 工具 ${context.tool} 执行失败：${detail}`);
   }
-  const state: SanitizationState = {
-    remainingNodes: 1_000,
-    remainingTextChars: context.maxTextChars,
-    seen: new WeakSet(),
-  };
   const facts: Record<string, PluginJsonValue> = {
     entry: context.entry,
     reference: context.reference,
     tool: context.tool,
   };
+  facts.mcpResult = sanitize(result, createSanitizationState(context.maxTextChars));
+  // Preserve every MCP content block (including image, audio and resource
+  // blocks). `result` below remains the parsed text-only compatibility view.
+  if (result.content !== undefined) {
+    facts.content = sanitize(result.content, createSanitizationState(context.maxTextChars));
+  }
+  if (result.isError !== undefined) {
+    facts.isError = sanitize(result.isError, createSanitizationState(context.maxTextChars));
+  }
   if (blocks.length > 0) {
     const parsed = blocks.map(parseText);
-    facts.result = sanitize(parsed.length === 1 ? parsed[0] : parsed, state);
+    facts.result = sanitize(
+      parsed.length === 1 ? parsed[0] : parsed,
+      createSanitizationState(context.maxTextChars),
+    );
   }
   if (result.structuredContent !== undefined) {
-    facts.structuredContent = sanitize(result.structuredContent, state);
+    facts.structuredContent = sanitize(
+      result.structuredContent,
+      createSanitizationState(context.maxTextChars),
+    );
   }
   if (blocks.length === 0 && result.structuredContent === undefined) {
     facts.result = null;

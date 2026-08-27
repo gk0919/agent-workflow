@@ -113,6 +113,8 @@ const captureContract = async (): Promise<void> => {
             owner: '示例负责人',
             token: 'exposed-token',
           },
+          isError: false,
+          _meta: { requestId: 'request-123' },
         };
       }
       return {
@@ -173,6 +175,30 @@ const captureContract = async (): Promise<void> => {
     status: '待处理',
     title: '需求标题',
   });
+  assert.deepEqual(requirement.facts.content, [
+    {
+      type: 'text',
+      text: '{"api_key":"exposed-api-key","authorization":"Bearer exposed-bearer","screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"待处理","title":"需求标题"}',
+    },
+    { type: 'image', data: 'excluded-binary-content' },
+  ]);
+  assert.equal(requirement.facts.isError, false);
+  assert.deepEqual(requirement.facts.mcpResult, {
+    content: [
+      {
+        type: 'text',
+        text: '{"api_key":"exposed-api-key","authorization":"Bearer exposed-bearer","screenshot":"https://files.example.test/a.png?OSSAccessKeyId=test&Signature=secret","status":"待处理","title":"需求标题"}',
+      },
+      { type: 'image', data: 'excluded-binary-content' },
+    ],
+    structuredContent: {
+      nested: { password: 'exposed-password' },
+      owner: '示例负责人',
+      token: 'exposed-token',
+    },
+    isError: false,
+    _meta: { requestId: 'request-123' },
+  });
   assert.match(JSON.stringify(requirement), /Signature=secret/);
   assert.deepEqual(requirement.facts.structuredContent, {
     nested: { password: 'exposed-password' },
@@ -180,7 +206,7 @@ const captureContract = async (): Promise<void> => {
     token: 'exposed-token',
   });
   assert.match(JSON.stringify(requirement), /exposed-(?:api-key|bearer|password|token)/);
-  assert.doesNotMatch(JSON.stringify(requirement), /excluded-binary-content/);
+  assert.match(JSON.stringify(requirement), /excluded-binary-content/);
 
   const defect = await provider.capture({ entry: 'pool', reference: 'BG654321' });
   assert.equal(defect.facts.result, '缺陷详情');

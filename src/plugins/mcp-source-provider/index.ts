@@ -120,13 +120,7 @@ export const connectMcpSource: McpSourceConnector = async (options) => {
         arguments: request.arguments,
         name: request.name,
       }, { timeout: timeoutMs });
-      return {
-        content: result.content,
-        ...(result.isError === undefined ? {} : { isError: result.isError }),
-        ...(result.structuredContent === undefined
-          ? {}
-          : { structuredContent: result.structuredContent }),
-      };
+      return result;
     },
     async close() {
       if (closed) {
