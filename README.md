@@ -30,6 +30,52 @@ npm run workflow:setup:check
 
 宿主项目应把包声明在 `devDependencies`，脚本只调用 `agent-workflow <command>`。不要引用 `node_modules` 中的 `src/` 文件，也不要复制 Core。GitHub Packages 的发布配置已声明，但 `npm publish`、Release、Tag 和推送都需要独立授权。
 
+### 推送与发布
+
+日常修改完成并通过检查后，提交并推送到 `main`：
+
+```sh
+git status
+git add <修改的文件>
+git commit -m "feat: 描述本次修改"
+git push origin main
+```
+
+发布新版本时，先更新版本号（不要覆盖已发布版本）：
+
+```sh
+npm version patch --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore: release v1.0.1"
+npm run quality:policy
+npm publish --registry=https://npm.pkg.github.com
+```
+
+然后创建并推送对应 Tag，再创建 GitHub Release：
+
+```sh
+git push origin main
+git tag -a v1.0.1 -m "Release v1.0.1"
+git push origin v1.0.1
+gh release create v1.0.1 --title "v1.0.1" --generate-notes
+```
+
+消费者需要把 `@gk0919` scope 指向 GitHub Packages，公开依赖仍从 npmjs 获取：
+
+```sh
+npm config set @gk0919:registry https://npm.pkg.github.com
+npm install @gk0919/agent-workflow
+```
+
+认证状态可用以下命令检查：
+
+```sh
+npm whoami --registry=https://npm.pkg.github.com
+gh auth status
+```
+
+GitHub Packages 的 npm 登录使用 GitHub Personal Access Token，不使用账号密码；Token 至少需要 `read:packages`，发布还需要 `write:packages`。不要把 Token 写入项目文件或提交到 Git。
+
 ## 指令优先级与加载顺序
 
 发生冲突时，按以下优先级处理：
