@@ -63,6 +63,14 @@ interface RouteValidationResult {
   }>;
 }
 
+/** Keeps full config validation while limiting runtime budget failures to one packet. */
+interface RouteValidationOptions {
+  budgetScope?: {
+    route: string;
+    stage?: string;
+  };
+}
+
 interface MaterializedDocument {
   content: string;
   path: string;
@@ -246,7 +254,10 @@ const resolveSkill = (skillName: string): string => {
   return relativePath;
 };
 
-export const validateRoutes = (config = loadRoutes()): RouteValidationResult => {
+export const validateRoutes = (
+  config = loadRoutes(),
+  options: RouteValidationOptions = {},
+): RouteValidationResult => {
   const errors: string[] = [];
   const baseDocs = Array.isArray(config.baseDocs) ? config.baseDocs : [];
   const denied = new Set(config.denyEagerDocs || []);
@@ -511,6 +522,10 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
       registerPath(relativePath, `${routeName}.references`));
 
     stages.forEach(([stageName, stage]) => {
+      const validatesStageBudget = !options.budgetScope || (
+        options.budgetScope.route === routeName &&
+        (!options.budgetScope.stage || options.budgetScope.stage === stageName)
+      );
       const docs = Array.isArray(stage.docs) ? stage.docs : [];
       const stageReferences = Array.isArray(stage.references)
         ? stage.references
@@ -608,7 +623,7 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
           route: routeName,
           stage: stageName,
         });
-        if (projectedChars > route.budgetChars) {
+        if (validatesStageBudget && projectedChars > route.budgetChars) {
           errors.push(
             `${routeName}/${stageName}: 预计 ${projectedChars} 字符，超过预算 ${route.budgetChars}`,
           );
@@ -619,7 +634,7 @@ export const validateRoutes = (config = loadRoutes()): RouteValidationResult => 
             (Number.isInteger(routePacketReserveChars)
               ? routePacketReserveChars
               : 0);
-          if (withReferenceChars > route.budgetChars) {
+          if (validatesStageBudget && withReferenceChars > route.budgetChars) {
             errors.push(
               `${routeName}/${stageName}: Reference ${reference} 预计 ` +
               `${withReferenceChars} 字符，超过预算 ${route.budgetChars}`,
@@ -658,7 +673,12 @@ export const buildRoutePacket = ({
 }: BuildRoutePacketOptions): RoutePacket => {
   const config = loadRoutes();
   const profile = loadActiveProfile();
-  const validation = validateRoutes(config);
+  const validation = validateRoutes(config, {
+    budgetScope: {
+      route: routeName,
+      stage: stageName,
+    },
+  });
   if (validation.errors.length > 0) {
     throw new Error(`路由配置未通过校验：${validation.errors[0]}`);
   }

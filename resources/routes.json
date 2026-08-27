@@ -124,7 +124,10 @@
       ],
       "onFailure": "切换 standard-change/capture，保留已确认的任务事实",
       "references": [
-        "workflow:docs/micro-change.md",
+        "workflow:docs/micro-change.md#gate",
+        "workflow:docs/micro-change.md#defect-brief",
+        "workflow:docs/micro-change.md#requirement-brief",
+        "workflow:docs/micro-change.md#升级",
         "workflow:docs/verification-contract.md#micro-change",
         "workflow:docs/05-execution.md",
         "workflow:docs/06-review.md",
@@ -140,7 +143,9 @@
             "workflow:resources/cards/intent-defect.md"
           ],
           "references": [
-            "workflow:docs/micro-change.md",
+            "workflow:docs/micro-change.md#gate",
+            "workflow:docs/micro-change.md#defect-brief",
+            "workflow:docs/micro-change.md#升级",
             "workflow:docs/verification-contract.md#micro-change"
           ],
           "next": "提交设计根因、责任层、最小完整修改和验证项，等待用户批准"
@@ -153,7 +158,9 @@
             "workflow:resources/cards/intent-requirement.md"
           ],
           "references": [
-            "workflow:docs/micro-change.md",
+            "workflow:docs/micro-change.md#gate",
+            "workflow:docs/micro-change.md#requirement-brief",
+            "workflow:docs/micro-change.md#升级",
             "workflow:docs/verification-contract.md#micro-change"
           ],
           "next": "提交需求不变量、责任层、最小完整修改和验证项，等待用户批准"

@@ -463,6 +463,24 @@ export const main = () => {
       validateRoutes(lowBudgetConfig).errors.join('\n'),
       /超过预算/,
     );
+    assert.doesNotMatch(
+      validateRoutes(lowBudgetConfig, {
+        budgetScope: {
+          route: 'standard-change',
+          stage: 'capture',
+        },
+      }).errors.join('\n'),
+      /micro-change\/.*超过预算/,
+    );
+    assert.match(
+      validateRoutes(lowBudgetConfig, {
+        budgetScope: {
+          route: 'micro-change',
+          stage: 'locate-defect',
+        },
+      }).errors.join('\n'),
+      /micro-change\/locate-defect: 预计 .*超过预算/,
+    );
     const invalidStagePathConfig = JSON.parse(JSON.stringify(config));
     invalidStagePathConfig.routes['micro-change'].stagePaths.defect[0] =
       'missing-stage';
