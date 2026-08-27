@@ -53,6 +53,14 @@ const validationContract = (): void => {
   assert.deepEqual(
     parseMcpSourceProviderOptions({
       endpoint: 'https://mcp.example.test/service',
+      auth: { type: 'file', path: '/home/test/.config/mcp.token' },
+      routes: { requirement: { tool: 'query_requirement' } },
+    }).auth,
+    { type: 'file', path: '/home/test/.config/mcp.token' },
+  );
+  assert.deepEqual(
+    parseMcpSourceProviderOptions({
+      endpoint: 'https://mcp.example.test/service',
       auth: { type: 'command', command: 'mcp-credential-helper', args: ['token'] },
       routes: { requirement: { tool: 'query_requirement' } },
     }).auth,

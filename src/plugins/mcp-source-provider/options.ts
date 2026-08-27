@@ -138,7 +138,7 @@ const readAuth = (
   }
   if (type === 'file') {
     const filePath = requiredString(value.path, 'auth.path', 2_048);
-    if (!path.isAbsolute(filePath)) {
+    if (!path.posix.isAbsolute(filePath) && !path.win32.isAbsolute(filePath)) {
       throw new Error('auth.path 必须是绝对路径');
     }
     return { type, path: filePath };
