@@ -1,10 +1,12 @@
 import type { PluginJsonObject, PluginJsonValue } from '../../contracts/json.js';
+import path from 'node:path';
 
 const ENTRY_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 const ENVIRONMENT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SOURCE_TYPE_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
 const OPTION_KEYS = new Set([
   'allowInsecureHttp',
+  'auth',
   'endpoint',
   'maxTextChars',
   'routes',
@@ -12,6 +14,7 @@ const OPTION_KEYS = new Set([
   'timeoutMs',
   'tokenEnv',
 ]);
+const AUTH_KEYS = new Set(['type', 'env', 'path', 'command', 'args', 'profile']);
 const ROUTE_KEYS = new Set([
   'referenceArgument',
   'referencePattern',
@@ -34,7 +37,14 @@ export interface McpSourceProviderOptions {
   readonly sourceType: string;
   readonly timeoutMs: number;
   readonly tokenEnv: string;
+  readonly auth: McpSourceProviderAuth;
 }
+
+export type McpSourceProviderAuth =
+  | { readonly type: 'environment'; readonly env: string }
+  | { readonly type: 'file'; readonly path: string }
+  | { readonly type: 'credential-store'; readonly profile: string }
+  | { readonly type: 'command'; readonly command: string; readonly args: readonly string[] };
 
 const isObject = (value: unknown): value is Readonly<PluginJsonObject> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -96,6 +106,64 @@ const readStaticArguments = (
     (entry): entry is [string, PluginJsonValue] => entry[1] !== undefined,
   );
   return Object.freeze(Object.fromEntries(entries));
+};
+
+const readAuth = (
+  value: PluginJsonValue | undefined,
+  tokenEnvValue: PluginJsonValue | undefined,
+): McpSourceProviderAuth => {
+  if (value !== undefined && tokenEnvValue !== undefined) {
+    throw new Error('auth 与 tokenEnv 不能同时配置');
+  }
+  if (value === undefined) {
+    const env = tokenEnvValue === undefined
+      ? 'AGENT_WORKFLOW_MCP_TOKEN'
+      : requiredString(tokenEnvValue, 'tokenEnv', 128);
+    if (!ENVIRONMENT_NAME_PATTERN.test(env)) {
+      throw new Error('tokenEnv 必须是合法环境变量名');
+    }
+    return { type: 'environment', env };
+  }
+  if (!isObject(value)) {
+    throw new Error('auth 必须是对象');
+  }
+  rejectUnknownKeys(value, AUTH_KEYS, 'auth');
+  const type = requiredString(value.type, 'auth.type', 32);
+  if (type === 'environment') {
+    const env = requiredString(value.env, 'auth.env', 128);
+    if (!ENVIRONMENT_NAME_PATTERN.test(env)) {
+      throw new Error('auth.env 必须是合法环境变量名');
+    }
+    return { type, env };
+  }
+  if (type === 'file') {
+    const filePath = requiredString(value.path, 'auth.path', 2_048);
+    if (!path.isAbsolute(filePath)) {
+      throw new Error('auth.path 必须是绝对路径');
+    }
+    return { type, path: filePath };
+  }
+  if (type === 'credential-store') {
+    const profile = requiredString(value.profile, 'auth.profile', 64);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(profile)) {
+      throw new Error('auth.profile 必须是 1 到 64 个字母、数字、点、下划线或连字符');
+    }
+    return { type, profile };
+  }
+  if (type === 'command') {
+    const command = requiredString(value.command, 'auth.command', 2_048);
+    const argsValue = value.args;
+    if (argsValue !== undefined &&
+        (!Array.isArray(argsValue) || argsValue.some((arg) => typeof arg !== 'string'))) {
+      throw new Error('auth.args 必须是字符串数组');
+    }
+    const args = (argsValue === undefined ? [] : argsValue) as string[];
+    if (args.length > 32 || args.some((arg) => arg.length > 2_048)) {
+      throw new Error('auth.args 超出长度限制');
+    }
+    return { type, command, args: Object.freeze([...args]) };
+  }
+  throw new Error('auth.type 只支持 environment、file、credential-store 或 command');
 };
 
 const readRoute = (entry: string, value: PluginJsonValue | undefined): McpSourceRoute => {
@@ -164,12 +232,7 @@ export const parseMcpSourceProviderOptions = (
   const routes = Object.freeze(Object.fromEntries(
     Object.entries(routesValue).map(([entry, route]) => [entry, readRoute(entry, route)]),
   ));
-  const tokenEnv = value.tokenEnv === undefined
-    ? 'AGENT_WORKFLOW_MCP_TOKEN'
-    : requiredString(value.tokenEnv, 'tokenEnv', 128);
-  if (!ENVIRONMENT_NAME_PATTERN.test(tokenEnv)) {
-    throw new Error('tokenEnv 必须是合法环境变量名');
-  }
+  const auth = readAuth(value.auth, value.tokenEnv);
   const sourceType = value.sourceType === undefined
     ? 'mcp'
     : requiredString(value.sourceType, 'sourceType', 64);
@@ -183,6 +246,7 @@ export const parseMcpSourceProviderOptions = (
     routes,
     sourceType,
     timeoutMs: boundedInteger(value.timeoutMs, 'timeoutMs', 60_000, 1_000, 120_000),
-    tokenEnv,
+    tokenEnv: auth.type === 'environment' ? auth.env : '',
+    auth,
   });
 };

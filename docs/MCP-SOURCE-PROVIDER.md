@@ -1,6 +1,6 @@
 # MCP Source Provider
 
-内置 `mcp-source-provider` 模块把精确来源编号适配到公开的 `SourceProviderService` 契约。它使用官方 MCP TypeScript 客户端，通过 Streamable HTTP 延迟连接，从环境变量读取 Bearer Token，并随 Plugin 生命周期关闭 MCP 会话。
+内置 `mcp-source-provider` 模块把精确来源编号适配到公开的 `SourceProviderService` 契约。它使用官方 MCP TypeScript 客户端，通过 Streamable HTTP 延迟连接，并从可配置的凭据来源读取 Bearer Token，随 Plugin 生命周期关闭 MCP 会话。模块不包含任何业务平台名称、编号前缀或固定工具名。
 
 模块不包含凭据，也不内置任何项目地址、编号格式或工具名称。严禁把 Bearer Token 写入 `.agent-workflow/config.json`、源文件、终端历史或 Git。
 
@@ -50,7 +50,51 @@ pnpm add -D @gk0919/agent-workflow @modelcontextprotocol/client@^2.0.0
 
 不要猜测参数名；应从 MCP 工具 Schema 或错误提示列出的候选参数中确认。
 
-## 3. 在运行时提供轮换后的 Token
+## 3. 配置凭据来源
+
+默认兼容旧配置的 `tokenEnv` 环境变量。使用包内凭据助手时，Provider 可通过明确的 `credential-store` 类型直接读取用户配置目录中的 `credentials.json`，不依赖 `bin` 命令入口：
+
+```json
+{
+  "auth": {
+    "type": "credential-store",
+    "profile": "project-default"
+  }
+}
+```
+
+`command` 类型仍表示执行外部命令并读取其标准输出；它不会被解释为包内凭据存储。
+
+如需使用其他凭据助手，可配置命令或仓库外的绝对路径凭据文件：
+
+```json
+{
+  "auth": {
+    "type": "command",
+    "command": "mcp-credential-helper",
+    "args": ["token", "--profile", "project-default"]
+  }
+}
+```
+
+命令通过无 shell 的 `execFile` 启动，标准输出可以是裸 Token，也可以是 `{\"access_token\":\"...\"}`；标准错误不会回传到工作流错误。凭据助手应自行使用 Windows Credential Manager、Linux Secret Service 或权限为 `0600` 的用户文件。
+
+包内提供通用的 `mcp-credential-helper` CLI。运行 `mcp-credential-helper set project-default` 设置凭据，交互式输入以 `*` 提供掩码反馈，管道调用则从 stdin 读取。使用 `status` 检查状态，使用 `clear` 清除凭据；Token 不作为命令行参数传递。当前实现使用用户配置目录和 `0600` 文件权限，Windows 与 WSL 会分别保存各自凭据。
+
+文件方式要求绝对路径，文件内容同样支持裸 Token 或 `access_token` JSON：
+
+```json
+{
+  "auth": {
+    "type": "file",
+    "path": "C:/Users/user/.config/mcp/token"
+  }
+}
+```
+
+`auth` 与旧的 `tokenEnv` 不能同时配置。配置中禁止写入 Token 值。
+
+## 4. 在运行时提供轮换后的 Token（兼容旧配置）
 
 PowerShell，仅对当前进程生效：
 
@@ -66,7 +110,7 @@ export PROJECT_MCP_TOKEN='<rotated-token>'
 
 建议直接提供原始 Token；带 `Bearer ` 前缀的值也会被接受并规范化。Provider 不会输出 Token，只在请求前即时向 SDK 提供凭据。
 
-## 4. 校验与捕获
+## 5. 校验与捕获
 
 由于 Provider 延迟连接，`plugins:check` 只校验配置和生命周期，不会建立网络连接：
 

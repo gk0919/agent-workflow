@@ -42,6 +42,41 @@ const providerOptions = (): PluginJsonObject => ({
 });
 
 const validationContract = (): void => {
+  assert.deepEqual(
+    parseMcpSourceProviderOptions({
+      endpoint: 'https://mcp.example.test/service',
+      auth: { type: 'file', path: 'C:\\Users\\test\\.config\\mcp.token' },
+      routes: { requirement: { tool: 'query_requirement' } },
+    }).auth,
+    { type: 'file', path: 'C:\\Users\\test\\.config\\mcp.token' },
+  );
+  assert.deepEqual(
+    parseMcpSourceProviderOptions({
+      endpoint: 'https://mcp.example.test/service',
+      auth: { type: 'command', command: 'mcp-credential-helper', args: ['token'] },
+      routes: { requirement: { tool: 'query_requirement' } },
+    }).auth,
+    { type: 'command', command: 'mcp-credential-helper', args: ['token'] },
+  );
+  assert.deepEqual(
+    parseMcpSourceProviderOptions({
+      endpoint: 'https://mcp.example.test/service',
+      auth: { type: 'credential-store', profile: 'project-default' },
+      routes: { requirement: { tool: 'query_requirement' } },
+    }).auth,
+    { type: 'credential-store', profile: 'project-default' },
+  );
+  assert.throws(() => parseMcpSourceProviderOptions({
+    endpoint: 'https://mcp.example.test/service',
+    auth: { type: 'file', path: '.secrets/mcp.token' },
+    routes: { requirement: { tool: 'query_requirement' } },
+  }), /绝对路径/);
+  assert.throws(() => parseMcpSourceProviderOptions({
+    endpoint: 'https://mcp.example.test/service',
+    auth: { type: 'file', path: 'C:\\Users\\test\\mcp.token' },
+    tokenEnv: 'TEST_MCP_TOKEN',
+    routes: { requirement: { tool: 'query_requirement' } },
+  }), /不能同时配置/);
   assert.throws(() => parseMcpSourceProviderOptions({
     endpoint: 'http://mcp.example.test/service',
     routes: { requirement: { tool: 'query_requirement' } },
@@ -115,7 +150,7 @@ const captureContract = async (): Promise<void> => {
   const connect: McpSourceConnector = async (options) => {
     connectCount += 1;
     assert.equal(options.endpoint.href, 'http://mcp.example.test/service');
-    assert.equal(options.readToken(), 'test-token-not-a-secret');
+    assert.equal(await options.readToken(), 'test-token-not-a-secret');
     assert.equal(options.timeoutMs, 5_000);
     return connection;
   };
@@ -178,7 +213,7 @@ const captureContract = async (): Promise<void> => {
 const failureContract = async (): Promise<void> => {
   const missingSecret = createMcpSourceProvider(providerOptions(), {
     connect: async (options) => {
-      options.readToken();
+      await options.readToken();
       throw new Error('Connector 不应继续执行');
     },
     environment: {},

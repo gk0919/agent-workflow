@@ -51,7 +51,8 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "agent-workflow": "./dist/bin/agent-workflow.js"
+    "agent-workflow": "./dist/bin/agent-workflow.js",
+    "mcp-credential-helper": "./dist/bin/mcp-credential-helper.js"
   },
   "engines": {
     "node": ">=20"

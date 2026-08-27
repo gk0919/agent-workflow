@@ -1,4 +1,9 @@
 import process from 'node:process';
+import { execFile as execFileCallback } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -17,6 +22,7 @@ import {
 import {
   parseMcpSourceProviderOptions,
   type McpSourceProviderOptions,
+  type McpSourceProviderAuth,
   type McpSourceRoute,
 } from './options.js';
 import {
@@ -42,7 +48,7 @@ export interface McpSourceConnection {
 
 export interface McpSourceConnectionOptions {
   readonly endpoint: URL;
-  readonly readToken: () => string;
+  readonly readToken: () => Promise<string>;
   readonly timeoutMs: number;
 }
 
@@ -149,6 +155,96 @@ const readBearerToken = (
     throw new Error(`MCP 凭据环境变量为空：${name}`);
   }
   return token;
+};
+
+const readTokenText = (value: string, source: string): string => {
+  const configured = value.trim();
+  if (!configured) {
+    throw new Error(`MCP 凭据为空：${source}`);
+  }
+  if (configured.startsWith('{')) {
+    try {
+      const parsed: unknown = JSON.parse(configured);
+      if (isObject(parsed)) {
+        const token = parsed.access_token ?? parsed.accessToken ?? parsed.token;
+        if (typeof token === 'string' && token.trim()) {
+          return token.trim().replace(/^Bearer\s+/i, '').trim();
+        }
+      }
+    } catch {
+      throw new Error(`MCP 凭据命令返回了无效 JSON：${source}`);
+    }
+  }
+  return configured.replace(/^Bearer\s+/i, '').trim();
+};
+
+const execFile = promisify(execFileCallback);
+
+const readCredentialStoreToken = async (
+  profile: string,
+  environment: Readonly<Record<string, string | undefined>>,
+): Promise<string> => {
+  const configRoot = process.platform === 'win32'
+    ? environment.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+    : environment.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  const filePath = path.join(configRoot, 'mcp-credentials', 'credentials.json');
+  try {
+    const parsed: unknown = JSON.parse(await readFile(filePath, 'utf8'));
+    if (typeof parsed !== 'object' || parsed === null ||
+        !('version' in parsed) || parsed.version !== 1 ||
+        !('profiles' in parsed) || typeof parsed.profiles !== 'object' ||
+        parsed.profiles === null || Array.isArray(parsed.profiles)) {
+      throw new Error('format');
+    }
+    const record = (parsed.profiles as Record<string, unknown>)[profile];
+    if (typeof record !== 'object' || record === null ||
+        !('token' in record) || typeof record.token !== 'string' || !record.token.trim()) {
+      throw new Error('missing');
+    }
+    return record.token.trim().replace(/^Bearer\s+/i, '').trim();
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'missing') {
+      throw new Error(`未找到 profile：${profile}`);
+    }
+    throw new Error(`凭据存储读取失败：${filePath}`);
+  }
+};
+
+const readConfiguredToken = async (
+  auth: McpSourceProviderAuth,
+  environment: Readonly<Record<string, string | undefined>>,
+  timeoutMs: number,
+): Promise<string> => {
+  if (auth.type === 'environment') {
+    return readBearerToken(environment, auth.env);
+  }
+  if (auth.type === 'file') {
+    try {
+      return readTokenText(await readFile(auth.path, 'utf8'), `auth.path ${auth.path}`);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.startsWith('MCP 凭据')) {
+        throw error;
+      }
+      throw new Error(`读取 MCP 凭据文件失败：${auth.path}`);
+    }
+  }
+  if (auth.type === 'credential-store') {
+    return readCredentialStoreToken(auth.profile, environment);
+  }
+  try {
+    const result = await execFile(auth.command, [...auth.args], {
+      env: { ...environment },
+      timeout: timeoutMs,
+      maxBuffer: 16 * 1024,
+      windowsHide: true,
+    });
+    return readTokenText(result.stdout, `auth.command ${auth.command}`);
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.startsWith('MCP 凭据')) {
+      throw error;
+    }
+    throw new Error(`读取 MCP 凭据命令失败：${auth.command}`);
+  }
 };
 
 const schemaProperties = (schema: unknown): Readonly<Record<string, unknown>> => {
@@ -271,7 +367,11 @@ class McpSourceProvider implements SourceProviderService {
     }
     this.#connectionPromise ??= this.#connect({
       endpoint: this.#options.endpoint,
-      readToken: () => readBearerToken(this.#environment, this.#options.tokenEnv),
+      readToken: () => readConfiguredToken(
+        this.#options.auth,
+        this.#environment,
+        this.#options.timeoutMs,
+      ),
       timeoutMs: this.#options.timeoutMs,
     }).catch((error: unknown) => {
       this.#connectionPromise = undefined;
