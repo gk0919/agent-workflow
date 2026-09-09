@@ -676,6 +676,8 @@ export interface ExecutionJournalStore {
   readEvents(): readonly ExecutionEvent[];
   readJsonArtifact(reference: ExecutionArtifactReference): PluginJsonValue;
   writeJsonArtifact(value: PluginJsonValue): ExecutionArtifactReference;
+  /** Optional cross-process lease used to serialize active execution of one Run. */
+  acquireRunLease?: () => () => void;
 }
 
 export interface FakeExecutorAttemptFixture {

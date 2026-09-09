@@ -2,6 +2,8 @@
 
 内置 `mcp-source-provider` 模块把精确来源编号适配到公开的 `SourceProviderService` 契约。它使用官方 MCP TypeScript 客户端，通过 Streamable HTTP 延迟连接，并从可配置的凭据来源读取 Bearer Token，随 Plugin 生命周期关闭 MCP 会话。模块不包含任何业务平台名称、编号前缀或固定工具名。
 
+Route 支持可选的 `followUps` 链式调用。首个工具的文本或结构化文本中提取受限正则匹配，再调用后续工具；首个工具的结果始终保持原样，后续结果以 `facts.followUps` 保存。文档类后续结果另外生成 `facts.aiContext.linkedDocuments`，保留原始 `docText`，并用 `assetId`、`imageReferences` 和 `segments` 表示正文与图片的对应关系。该视图是增量字段，不替换或重写原始 Markdown、HTML、图片 URL 或附件字段。
+
 模块不包含凭据，也不内置任何项目地址、编号格式或工具名称。严禁把 Bearer Token 写入 `.agent-workflow/config.json`、源文件、终端历史或 Git。
 
 ## 1. 安装可选传输依赖
@@ -35,6 +37,31 @@ pnpm add -D @gk0919/agent-workflow @modelcontextprotocol/client@^2.0.0
 |---|---|---|
 | `requirement` | `query_requirement` | `REQ-...` |
 | `defect` | `query_bug` | `BUG-...` |
+
+链式调用示例：
+
+```json
+{
+  "requirement": {
+    "tool": "query_requirement",
+    "referenceArgument": "requirement_sn",
+    "referencePattern": "^REQ-",
+    "followUps": [{
+      "tool": "short_url_to_doc",
+      "required": false,
+      "maxCalls": 5,
+      "argumentMappings": {
+        "short_url": {
+          "source": "text",
+          "pattern": "https:\\/\\/s\\.example\\/[A-Za-z0-9]+"
+        }
+      }
+    }]
+  }
+}
+```
+
+`followUps` 仅允许从文本提取字符串参数，单个 Route 最多 8 个后续步骤，每步默认最多 10 次调用且可配置为 1 到 20 次。`required: false` 时后续提取不到链接或单次调用失败会保留错误事实并返回首个结果；`required: true` 时失败关闭。正则必须有边界，避免从任意字段扩散调用。
 
 命令把 Profile 中的逻辑 Entry `pool` 传给 Provider。当该 Entry 不是 Adapter 的直接 Route 时，Provider 会根据 `referencePattern` 选择唯一匹配的已配置 Route；零匹配或多匹配都会失败关闭。
 
@@ -129,4 +156,4 @@ Provider 通常由 Active Profile 的 `sourceProviders.pool` 绑定选择。`--p
 
 MCP 工具错误、缺少 Route、编号格式异常、Schema 歧义、超时或凭据缺失都会失败关闭，并返回非零退出码。
 
-结果只保留 MCP 文本块和结构化内容；图片与二进制块会被排除。嵌套层级、集合大小和文本长度都会在进入工作流事实前受到限制。
+结果保留 MCP 的文本、结构化内容和内容块，并在进入工作流事实前限制嵌套层级、集合大小和文本长度。图片二进制不复制进事实；图片块、正文中的 Markdown/HTML 图片引用及其 URL 会保留。文档 `pictureInfos`、`attachmentInfos` 与正文引用按 URL（忽略查询串和片段）关联；没有元数据的正文引用会生成占位资产，确保 AI 仍能知道图片位于哪段文字中。签名 URL 不应写入日志、任务持久化或 Git。

@@ -29,6 +29,7 @@ import {
   toSourceCaptureResult,
   type McpSourceToolResult,
 } from './result.js';
+import { executeFollowUps } from './chain.js';
 
 export interface McpSourceTool {
   readonly inputSchema?: unknown;
@@ -408,8 +409,16 @@ class McpSourceProvider implements SourceProviderService {
       }),
       name: route.tool,
     }, this.#options.timeoutMs);
+    const followUps = await executeFollowUps(
+      route.followUps,
+      result,
+      tools,
+      connection,
+      this.#options.timeoutMs,
+    );
     return toSourceCaptureResult(result, {
       entry: selected.entry,
+      followUps,
       maxTextChars: this.#options.maxTextChars,
       now: this.#now,
       reference,

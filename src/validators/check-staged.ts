@@ -24,7 +24,7 @@ const PROFILE_FORBIDDEN_PATHS = loadActiveProfile()
   .map((pattern) => new RegExp(pattern, 'i'));
 const LOCAL_WORKFLOW_PREFIXES = [
   workflowRelativePath('tasksRoot'),
-  workflowRelativePath('runtimeRoot', 'logs'),
+  workflowRelativePath('runtimeRoot'),
 ].map((relativePath) => relativePath.replaceAll('\\', '/'));
 
 const SECRET_PATTERNS = [

@@ -4,6 +4,8 @@ import {
   linkSync,
   lstatSync,
   mkdirSync,
+  closeSync,
+  openSync,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -98,6 +100,7 @@ export class FileExecutionJournalStore implements ExecutionJournalStore {
   readonly #artifactsDirectory: string;
   readonly #eventsDirectory: string;
   readonly #runDirectory: string;
+  readonly #leasePath: string;
 
   constructor(executionsRoot: string, runId: string, options: FileExecutionJournalOptions = {}) {
     if (!RUN_ID_PATTERN.test(runId)) {
@@ -117,6 +120,7 @@ export class FileExecutionJournalStore implements ExecutionJournalStore {
       mkdirSync(requestedRunDirectory);
     }
     this.#runDirectory = realpathSync(requestedRunDirectory);
+    this.#leasePath = path.join(this.#runDirectory, '.execution.lock');
     if (!isWithin(realRoot, this.#runDirectory)) {
       throw new Error('Execution Run 目录越出 executions 根目录');
     }
@@ -126,6 +130,30 @@ export class FileExecutionJournalStore implements ExecutionJournalStore {
       ensureSafeDirectory(this.#runDirectory, this.#eventsDirectory, true);
       ensureSafeDirectory(this.#runDirectory, this.#artifactsDirectory, true);
     }
+  }
+
+  acquireRunLease(): () => void {
+    let descriptor: number;
+    try {
+      descriptor = openSync(this.#leasePath, 'wx');
+      writeFileSync(this.#leasePath, `${process.pid}\n`, { encoding: 'utf8' });
+    } catch (error: unknown) {
+      if ((error as { code?: string })?.code === 'EEXIST') {
+        try {
+          const owner = Number.parseInt(readFileSync(this.#leasePath, 'utf8').trim(), 10);
+          if (Number.isInteger(owner) && owner > 0) {
+            try { process.kill(owner, 0); } catch { unlinkSync(this.#leasePath); return this.acquireRunLease(); }
+          }
+        } catch { /* preserve the active lock when ownership cannot be inspected */ }
+        throw new Error('Execution Run 正在被其他 Runner 执行');
+      }
+      throw error;
+    }
+    return () => {
+      try { closeSync(descriptor); } finally {
+        if (existsSync(this.#leasePath)) unlinkSync(this.#leasePath);
+      }
+    };
   }
 
   append(event: ExecutionEvent): void {

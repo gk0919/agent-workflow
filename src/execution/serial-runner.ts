@@ -56,6 +56,28 @@ const TERMINAL_EVENT_TYPES = new Set<ExecutionEventType>([
   'run.failed',
   'run.transitioned',
 ]);
+const localRunLeases = new Set<string>();
+
+const withRunLease = async <T>(
+  store: ExecutionJournalStore,
+  action: () => Promise<T>,
+): Promise<T> => {
+  if (localRunLeases.has(store.runId)) {
+    throw new Error('Execution Run 正在被其他 Runner 执行');
+  }
+  localRunLeases.add(store.runId);
+  let release: (() => void) | undefined;
+  try {
+    release = store.acquireRunLease?.();
+  } catch (error: unknown) {
+    localRunLeases.delete(store.runId);
+    throw error;
+  }
+  try { return await action(); } finally {
+    release?.();
+    localRunLeases.delete(store.runId);
+  }
+};
 
 export interface SerialExecutionOptions {
   readonly approvedCheckpoints?: readonly string[];
@@ -1461,7 +1483,7 @@ export const runSerialWorkflow = async (
   options: SerialExecutionOptions,
 ): Promise<ExecutionRunResult> => {
   try {
-    return await runSerialWorkflowInternal(options);
+    return await withRunLease(options.store, () => runSerialWorkflowInternal(options));
   } catch (error: unknown) {
     if (!(error instanceof ExecutionControlChangedError)) {
       throw error;
@@ -2962,7 +2984,7 @@ export const runParallelWorkflow = async (
   options: ParallelExecutionOptions,
 ): Promise<ExecutionRunResult> => {
   try {
-    return await runParallelWorkflowInternal(options, 'parallel-readonly');
+    return await withRunLease(options.store, () => runParallelWorkflowInternal(options, 'parallel-readonly'));
   } catch (error: unknown) {
     if (!(error instanceof ExecutionControlChangedError)) {
       throw error;
@@ -2985,7 +3007,7 @@ export const runWritableWorkflow = async (
   options: WritableExecutionOptions,
 ): Promise<ExecutionRunResult> => {
   try {
-    return await runParallelWorkflowInternal(options, 'writable-worktree');
+    return await withRunLease(options.store, () => runParallelWorkflowInternal(options, 'writable-worktree'));
   } catch (error: unknown) {
     if (!(error instanceof ExecutionControlChangedError)) {
       throw error;
@@ -3013,7 +3035,7 @@ export const inspectSettledWorkflowRun = (
   const events = store.readEvents();
   validateEventIdentity(events, plan, store.runId);
   const last = events.at(-1);
-  const status = last?.type === 'run.paused' ? 'paused' : terminalStatus(last);
+  const status = terminalStatus(last);
   return status ? buildRunResult(definition, plan, store, events, status) : undefined;
 };
 
@@ -3051,6 +3073,9 @@ const controlExecution = (
   }
   if (action === 'pause' && events.at(-1)?.type === 'run.paused') {
     return { eventCount: events.length, runId: store.runId, status: 'paused' };
+  }
+  if (action === 'pause' && !events.some((event) => event.type === 'run.started')) {
+    throw new Error('Execution Run 尚未启动，禁止 pause');
   }
   const plan: StaticExecutionPlan = {
     layers: [],

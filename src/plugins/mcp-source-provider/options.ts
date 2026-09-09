@@ -16,15 +16,38 @@ const OPTION_KEYS = new Set([
 ]);
 const AUTH_KEYS = new Set(['type', 'env', 'path', 'command', 'args', 'profile']);
 const ROUTE_KEYS = new Set([
+  'followUps',
   'referenceArgument',
   'referencePattern',
   'staticArguments',
   'tool',
 ]);
+const FOLLOW_UP_KEYS = new Set([
+  'argumentMappings',
+  'maxCalls',
+  'required',
+  'staticArguments',
+  'tool',
+]);
+const FOLLOW_UP_MAPPING_KEYS = new Set(['pattern', 'source']);
 
 export interface McpSourceRoute {
+  readonly followUps?: readonly McpSourceFollowUp[];
   readonly referenceArgument?: string;
   readonly referencePattern?: string;
+  readonly staticArguments?: Readonly<Record<string, PluginJsonValue>>;
+  readonly tool: string;
+}
+
+export interface McpSourceFollowUpMapping {
+  readonly pattern: string;
+  readonly source: 'text';
+}
+
+export interface McpSourceFollowUp {
+  readonly argumentMappings: Readonly<Record<string, McpSourceFollowUpMapping>>;
+  readonly maxCalls: number;
+  readonly required: boolean;
   readonly staticArguments?: Readonly<Record<string, PluginJsonValue>>;
   readonly tool: string;
 }
@@ -106,6 +129,62 @@ const readStaticArguments = (
     (entry): entry is [string, PluginJsonValue] => entry[1] !== undefined,
   );
   return Object.freeze(Object.fromEntries(entries));
+};
+
+const readFollowUpMapping = (
+  path: string,
+  value: PluginJsonValue | undefined,
+): McpSourceFollowUpMapping => {
+  if (!isObject(value)) {
+    throw new Error(`${path} 必须是对象`);
+  }
+  rejectUnknownKeys(value, FOLLOW_UP_MAPPING_KEYS, path);
+  const source = requiredString(value.source, `${path}.source`, 32);
+  if (source !== 'text') {
+    throw new Error(`${path}.source 只支持 text`);
+  }
+  const pattern = requiredString(value.pattern, `${path}.pattern`, 512);
+  try {
+    new RegExp(pattern, 'g');
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${path}.pattern 不是有效正则表达式：${message}`);
+  }
+  return Object.freeze({ pattern, source });
+};
+
+const readFollowUp = (
+  index: number,
+  value: PluginJsonValue | undefined,
+): McpSourceFollowUp => {
+  const path = `followUps[${index}]`;
+  if (!isObject(value)) {
+    throw new Error(`${path} 必须是对象`);
+  }
+  rejectUnknownKeys(value, FOLLOW_UP_KEYS, path);
+  const tool = requiredString(value.tool, `${path}.tool`, 128);
+  if (!isObject(value.argumentMappings) || Object.keys(value.argumentMappings).length === 0) {
+    throw new Error(`${path}.argumentMappings 必须是至少包含一个参数的对象`);
+  }
+  const argumentMappings = Object.freeze(Object.fromEntries(
+    Object.entries(value.argumentMappings).map(([argument, mapping]) => [
+      requiredString(argument, `${path}.argumentMappings 参数名`, 128),
+      readFollowUpMapping(`${path}.argumentMappings.${argument}`, mapping),
+    ]),
+  ));
+  const maxCalls = boundedInteger(value.maxCalls, `${path}.maxCalls`, 10, 1, 20);
+  const required = value.required === true;
+  if (value.required !== undefined && typeof value.required !== 'boolean') {
+    throw new Error(`${path}.required 必须是布尔值`);
+  }
+  const staticArguments = readStaticArguments(value.staticArguments, `${path}.staticArguments`);
+  return Object.freeze({
+    argumentMappings,
+    maxCalls,
+    required,
+    ...(staticArguments ? { staticArguments } : {}),
+    tool,
+  });
 };
 
 const readAuth = (
@@ -191,7 +270,16 @@ const readRoute = (entry: string, value: PluginJsonValue | undefined): McpSource
     }
   }
   const staticArguments = readStaticArguments(value.staticArguments, `${path}.staticArguments`);
+  const followUpsValue = value.followUps;
+  if (followUpsValue !== undefined &&
+      (!Array.isArray(followUpsValue) || followUpsValue.length > 8)) {
+    throw new Error(`${path}.followUps 必须是最多 8 项的数组`);
+  }
+  const followUps = followUpsValue === undefined
+    ? undefined
+    : Object.freeze(followUpsValue.map((followUp, index) => readFollowUp(index, followUp)));
   return Object.freeze({
+    ...(followUps ? { followUps } : {}),
     ...(referenceArgument ? { referenceArgument } : {}),
     ...(referencePattern ? { referencePattern } : {}),
     ...(staticArguments ? { staticArguments } : {}),

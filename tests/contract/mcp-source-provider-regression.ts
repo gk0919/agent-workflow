@@ -351,6 +351,81 @@ const failureContract = async (): Promise<void> => {
   await ambiguousRoute.close();
 };
 
+const followUpContract = async (): Promise<void> => {
+  const calls: Array<{ arguments: Readonly<Record<string, unknown>>; name: string }> = [];
+  const provider = createMcpSourceProvider({
+    ...providerOptions(),
+    routes: {
+      requirement: {
+        referencePattern: '^XQ',
+        tool: 'query_requirement',
+        followUps: [{
+          argumentMappings: {
+            short_url: {
+              pattern: 'https://s\\.example\\/[A-Za-z0-9-]+',
+              source: 'text',
+            },
+          },
+          maxCalls: 2,
+          required: true,
+          tool: 'short_url_to_doc',
+        }],
+      },
+    },
+  }, {
+    connect: async () => ({
+      async callTool(request) {
+        calls.push(request);
+        if (request.name === 'query_requirement') {
+          return {
+            content: [{ type: 'text', text: '{"docLink":"https://s.example/doc-1"}' }],
+          };
+        }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              docTitle: '文档标题',
+              docText: '正文一\n\n![截图](https://cdn.example/image.png)\n\n正文二',
+              pictureInfos: JSON.stringify([{
+                name: 'image.png',
+                url: 'https://cdn.example/image.png?signature=one',
+              }]),
+              attachmentInfos: JSON.stringify([{ name: '附件.html', url: 'https://cdn.example/attachment.html' }]),
+            }),
+          }],
+        };
+      },
+      async close() {},
+      async listTools() {
+        return [
+          { inputSchema: { properties: { requirement_sn: { type: 'string' } } }, name: 'query_requirement' },
+          { inputSchema: { properties: { short_url: { type: 'string' } } }, name: 'short_url_to_doc' },
+        ];
+      },
+    }),
+    environment: { TEST_MCP_TOKEN: 'test-token-not-a-secret' },
+  });
+  const result = await provider.capture({ entry: 'requirement', reference: 'XQ123456' });
+  assert.deepEqual(calls, [
+    { arguments: { requirement_sn: 'XQ123456' }, name: 'query_requirement' },
+    { arguments: { short_url: 'https://s.example/doc-1' }, name: 'short_url_to_doc' },
+  ]);
+  const aiContext = result.facts.aiContext as Record<string, unknown>;
+  const linkedDocuments = aiContext.linkedDocuments as Array<Record<string, unknown>>;
+  assert.equal(linkedDocuments.length, 1);
+  assert.equal(linkedDocuments[0]?.text, '正文一\n\n![截图](https://cdn.example/image.png)\n\n正文二');
+  assert.deepEqual(linkedDocuments[0]?.imageReferences, [{
+    assetId: 'image-1',
+    alt: '截图',
+    end: 41,
+    start: 5,
+    url: 'https://cdn.example/image.png',
+  }]);
+  assert.equal((linkedDocuments[0]?.segments as Array<Record<string, unknown>>)[1]?.assetId, 'image-1');
+  await provider.close();
+};
+
 const cliContract = (): void => {
   assert.deepEqual(readSourceCaptureArguments([
     '--entry', 'requirement',
@@ -412,6 +487,7 @@ export const main = async (): Promise<number> => {
   try {
     validationContract();
     await captureContract();
+    await followUpContract();
     await failureContract();
     cliContract();
     await pluginLifecycleContract();

@@ -16,6 +16,7 @@ import {
   type ExecutionRunResult,
 } from '../contracts/execution.js';
 import { serializeCanonicalJson } from '../core/execution-plan.js';
+import { loadWorkflowPaths } from '../config/workflow-config.js';
 import { errorMessage } from '../types/guards.js';
 import { FakeAgentExecutor } from './fake-executor.js';
 import { FileExecutionJournalStore } from './file-journal.js';
@@ -74,7 +75,7 @@ const resolveExecutionsRoot = (
   ) {
     throw new Error('.agent-workflow 目录越出当前工作区');
   }
-  const runtimeRoot = path.join(realProject, 'runtime');
+  const runtimeRoot = loadWorkflowPaths().runtimeRoot;
   mkdirSync(runtimeRoot, { recursive: true });
   if (lstatSync(runtimeRoot).isSymbolicLink()) {
     throw new Error('runtime 目录不得是 symlink');
