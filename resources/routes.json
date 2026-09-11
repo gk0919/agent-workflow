@@ -24,8 +24,9 @@
     "maxSemanticLines": 20
   },
   "verificationContract": {
-    "version": 1,
-    "requiredForSpecsCreatedOnOrAfter": "2026-07-30T00:00:00+08:00"
+    "version": 2,
+    "requiredForSpecsCreatedOnOrAfter": "2026-07-30T00:00:00+08:00",
+    "executionBaselineRequiredForSpecsCreatedOnOrAfter": "2026-09-11T00:00:00+08:00"
   },
   "riskCatalog": [
     "interface-change",
@@ -528,6 +529,21 @@
         }
       }
     },
+    "task-handoff": {
+      "entryModes": ["direct", "pool", "not-applicable"],
+      "budgetChars": 11500,
+      "skillReserveChars": 2500,
+      "reasonCodes": ["task-handoff"],
+      "disallowedRiskFlags": [],
+      "onFailure": "报告交接缺失项或过期事实，保留原始证据",
+      "stages": {
+        "prepare": {
+          "docs": ["workflow:resources/cards/handoff.md"],
+          "capabilities": ["handoff"],
+          "next": "汇总事实，补充交接说明并检查交接包"
+        }
+      }
+    },
     "portable-resume": {
       "entryModes": ["direct", "pool", "not-applicable"],
       "budgetChars": 11500,
@@ -541,7 +557,8 @@
       ],
       "stages": {
         "resume": {
-          "docs": ["workflow:resources/cards/portable-resume.md"],
+            "docs": ["workflow:resources/cards/portable-resume.md"],
+            "capabilities": ["handoff"],
           "references": [
             "workflow:docs/12-artifacts.md#portable-模式",
             "workflow:docs/12-artifacts.md#状态与生命周期"

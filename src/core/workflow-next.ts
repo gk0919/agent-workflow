@@ -15,6 +15,9 @@ import {
 import type { RoutesConfig } from '../types/contracts.js';
 import type { ManifestModel } from './task-lifecycle.js';
 import { errorMessage } from '../types/guards.js';
+import { persistentTask } from './task-checkpoint.js';
+import { taskPath } from './task-files.js';
+import { diagnosePersistentTask } from './task-persistence.js';
 
 interface DerivedRoute {
   entry: string;
@@ -135,6 +138,15 @@ export const buildNextRouteArguments = (
 export const main = (args: string[] = process.argv.slice(2)): number => {
   try {
     const { remainingArgs, taskId } = readNextArguments(args);
+    const directory = taskPath(taskId);
+    if (persistentTask(directory)) {
+      const diagnosis = diagnosePersistentTask(directory);
+      if (diagnosis.issues.length || diagnosis.status === 'blocked' || diagnosis.status === 'complete') {
+        process.stdout.write(`${JSON.stringify(diagnosis, null, 2)}\n`);
+        return diagnosis.issues.length || diagnosis.status === 'blocked' ? 1 : 0;
+      }
+      process.stderr.write(`Next: ${diagnosis.nextWorkItem ?? diagnosis.stage}\n`);
+    }
     const derived = deriveNextRoute(taskId);
     return routeMain(buildNextRouteArguments(derived, remainingArgs));
   } catch (error: unknown) {

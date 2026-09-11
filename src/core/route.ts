@@ -33,6 +33,8 @@ import {
   MICRO_BRIEF_STAGES,
 } from './micro-brief.js';
 import { guardRouteTask } from './task-route-guard.js';
+import { requirePublishedTask, hasTaskApproval } from './task-checkpoint.js';
+import { taskPath } from './task-files.js';
 import { readWorkflowInputFile } from './workflow-input.js';
 import type {
   RouteClassification,
@@ -370,17 +372,21 @@ export const isInitialRouteStage = (
 };
 
 export const validateImplementationApproval = ({
+  continuation = false,
   route,
   stage,
   userApproved = false,
-}: { route: string; stage: string; userApproved?: boolean }): void => {
+}: { continuation?: boolean; route: string; stage: string; userApproved?: boolean }): void => {
   const requiresApproval = stage === 'implement' &&
     ['micro-change', 'standard-change'].includes(route);
   if (requiresApproval && !userApproved) {
     throw new Error(
-      'Implementation Approval Gate: 实现前必须先向用户展示问题定位/需求依据、' +
-      '计划修改点和验证项并停止；仅在用户当前会话明确批准后，才能使用 ' +
-      '--user-approved 进入 Implement',
+      continuation
+        ? 'Implementation Approval Gate: 批准记录与当前计划一致，但仍需当前会话用户确认继续；' +
+          '确认后追加 --user-approved'
+        : 'Implementation Approval Gate: 实现前必须先向用户展示问题定位/需求依据、' +
+          '计划修改点和验证项并停止；仅在用户当前会话明确批准后，才能使用 ' +
+          '--user-approved 进入 Implement',
     );
   }
   if (!requiresApproval && userApproved) {
@@ -609,7 +615,10 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
     }
 
     classification = classifyRouteSelection(options);
-    validateImplementationApproval(options);
+    const published = options.taskId ? requirePublishedTask(taskPath(options.taskId), true) : null;
+    const continuation = Boolean(published && options.stage === 'implement' &&
+      hasTaskApproval(taskPath(options.taskId), published));
+    validateImplementationApproval({ ...options, continuation, userApproved: options.userApproved });
     const taskState = guardRouteTask(options);
     const initialStage = isInitialRouteStage(options, classification);
     const initialRouteStage = classification?.stage ||
@@ -627,7 +636,7 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
       }
     }
     const loaded = filterRouteEventsByVersion(loadRouteEvents({ days: 90 }));
-    validateRunLineage({
+    if (!published) validateRunLineage({
       createdRunId,
       events: loaded.events,
       initialRouteStage,

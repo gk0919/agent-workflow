@@ -32,9 +32,16 @@
 ├── review.md
 ├── verify.md
 ├── ci-verification.json
+├── checkpoint.json
+├── history/revision-<n>/
+├── verification-start/<VT-id>.json
+├── manifest-legacy.md
 ├── handoff.md
 └── git-report.md
 ```
+
+`checkpoint.json`、`history/`、`verification-start/` 和 `manifest-legacy.md` 只属于持久任务，
+由 CLI 维护，见 [`持久任务`](#持久任务persistent)。
 
 `task-id` 推荐格式：
 
@@ -84,6 +91,12 @@ npm run workflow:task -- resume --task <task-id> --action <next-action>
 
 `Plan -> Implement` 必须先向用户展示 Implementation Review 并获得当前会话的明确批准，随后
 在 `advance` 命令追加 `--user-approved`；该参数不能用于其他目标阶段。
+
+持久任务在同一已批准计划上恢复时，不需要重新展示完整的 Implementation Review，但任务记录
+不是授权证明：进入 Implement（`advance`、`reopen --to Implement`、`next`、`route --stage implement`）
+和激活工作项（`task item --status active`）仍必须由当前会话用户确认，并附 `--user-approved`，
+批准依据写入 `--approval-source`，不能用占位文本。记录中的批准只用于判断计划、范围和边界
+是否仍然适用；Git 与外部写入继续独立授权。
 
 多执行者或跨工具接力时，从 Resume Summary 取得 `Last Updated`，并在写命令追加
 `--expected-last-updated <date-time>`。值已变化时命令拒绝覆盖；同一时刻的并发命令由
@@ -182,8 +195,9 @@ YYYYMMDD-direct-<short-slug>
 
 `spec.md` 按 `agent-workflow/docs/03-spec.md` 保存等级、状态和完整技术方案。Spec Gate 变化后必须更新同一文件。
 
-新 Spec 在 frontmatter 声明 `contract_version: 1`，并使用 `verification.json` 保存
-Goal & Verification Contract。历史 Spec 没有版本字段时保持兼容；声明版本后该文件为必需产物。
+新 Spec 在 frontmatter 声明 `contract_version`，并使用 `verification.json` 保存
+Goal & Verification Contract；当前要求版本 2，启用时间与兼容规则见
+[`verification-contract.md`](./verification-contract.md#执行基线版本-2)。历史 Spec 没有版本字段时保持兼容；声明版本后该文件为必需产物。
 
 ## Portable 模式
 
@@ -203,51 +217,93 @@ Portable 模式要求：
 2. 每完成一个阶段，立即更新 `Stage Status` 和 `Resume`。
 3. 关键决策写入对应阶段产物，不依赖聊天上下文。
 4. 修改代码后从任务 patch 更新 `verification.json` 的 Actual Changes、Review 和 VT 状态。
-5. 工具切换前更新 `handoff.md`。
+5. 工具切换或显式交接前使用 task-handoff 路由生成交接包并检查。阶段推进更新 manifest 的最小检查点，不要求每一步重写完整交接包。
+
+## 持久任务（Persistent）
+
+`State Mode: Persistent` 的任务（manifest `Schema Version: 2`）以 `checkpoint.json` 作为已发布
+修订的标记，全部写入由 CLI 完成，不手工编辑检查点：
+
+```text
+agent-workflow task init --task <task-id> --route <route> --entry <entry> --goal <text> [--repository <path>] [--source-type <type> --source-text <text>]
+agent-workflow task status --task <task-id> [--format json]
+agent-workflow task checkpoint --task <task-id> --expected-revision <n> --reason <text> [--reconcile]
+agent-workflow task item --task <task-id> --item <T-id> --status <pending|active|blocked|complete> \
+  --expected-revision <n> --reason <text> [--checkpoint <text>] [--evidence <locator>[,<locator>]] [--user-approved]
+agent-workflow task verify-begin --task <task-id> --test <VT-id> --evidence <file>#<section> \
+  --environment <text> --expected-revision <n> --reason <text>
+agent-workflow task verify-record --task <task-id> --test <VT-id> \
+  --status <passed|failed|blocked|not-applicable> [--evidence <file>#<section>] \
+  --expected-revision <n> --reason <text>
+agent-workflow task migrate --task <task-id> --reason <text> [--user-approved --approval-source <text>]
+```
+
+规则：
+
+1. 每个写入都必须提供 `--expected-revision`；修订号不符时拒绝覆盖。
+2. `checkpoint.json` 记录修订号、产物哈希、仓库指纹、路由定义哈希、批准记录和 `route.reconstructed`。
+   它是发布标记，不是测试结论，也不授予任何权限。
+3. 每次发布前把产物快照写入 `history/revision-<n>/`。历史目录只读，用于核对被拒绝或中断的写入。
+4. 未发布的产物变动会在下一次检查中报 `Unpublished task changes`；先核对差异，再用
+   `checkpoint --reconcile` 修复，不根据未发布的 manifest 继续推进阶段。
+5. `verify-begin` / `verify-record` 登记并核验执行基线，规则见
+   [`verification-contract.md#执行基线版本-2`](./verification-contract.md#执行基线版本-2)。
+6. 旧任务迁移保留 `manifest-legacy.md` 原文。没有可核实 runtime 血缘时，只有用户明确确认的
+   重建迁移才被接受，并在检查点标记 `reconstructed: true`；`task status` 的 `continuity` 与
+   `warnings` 会报告该缺口，恢复时先重新核对产物、代码与批准来源。
+7. 任务目录仍属于忽略的本地数据；`history/` 随发布次数增长，按任务数据保留，CLI 不自动清理。
 
 ## Handoff
 
-`handoff.md` 使用以下模板：
+日常只需向 Agent 说“我要换会话，帮我交接当前任务”，新会话说“继续上次任务”。以下命令和文档维护均由 Agent 完成。
+内部入口分别为 `agent-workflow task prepare` 和 `agent-workflow task continue`，不需要用户提供任务 ID、Entry 或手工加载 Skill。会话已有明确任务时 Agent 附 `--task`；否则选择最近未完成任务，仅在同样最近的候选并列时询问。
+`task current --format json` 返回选择结果和候选；`summary`、`handoff`、`handoff-check` 也支持省略 ID，但多步操作应固定入口返回的 ID。
+选择依据是 manifest Last Updated 和有效交接记录生成时间，不使用文件 mtime；已完成任务不参与自动选择，显式 ID 不会回退到其他任务。损坏记录会报告错误，不能静默跳过后选中另一任务。
+`task continue` 加载恢复上下文并检查交接新鲜度，不修改生命周期，不自动执行 Git 写入。无任务记录时由 Agent 根据会话事实按原任务路由建立记录。
+
+交接由流程调度、Skill 整理判断、CLI 汇总和校验事实。Profile 的 `capabilitySkills` 将阶段能力绑定到包内或项目 Skill 定位符。
+业务阶段仍以 manifest 为唯一生命周期事实源，验证以 verification contract 为准；交接不授予额外权限。
+
+交接包由三份文件组成：
+
+- `handoff-notes.md`：执行者维护的检查点、决策依据、失败尝试、未知项、接手步骤和必读证据。
+- `handoff.md`：CLI 生成的完整阅读视图，汇总 manifest、source、verification 和 notes，不直接手工编辑。
+- `handoff-state.json`：版本化新鲜度记录，绑定产物哈希、生成文档哈希、仓库 HEAD、分支及已暂存/未暂存/未跟踪改动指纹。任务目录从仓库指纹中排除，其文件单独校验。
+
+先根据当前证据填写 notes，再执行：
+
+```text
+agent-workflow route --route task-handoff --stage prepare --entry <entry> --materialize
+agent-workflow task handoff --task <task-id>
+agent-workflow task handoff-check --task <task-id>
+```
+
+目标任务必须已有 manifest 和明确的 Repository Matrix。Git 检查只读，不自动暂存或提交。
+下面是 notes 的内容契约；不能只保留占位标题，无失败或无决策时说明原因：
 
 ```md
-# Handoff
+# Handoff Notes
 
-## Task
-- Task ID:
-- Goal:
-- Current Stage:
-- Next Action:
-- Previous Executor:
-- Next Executor:
-- Handoff Time:
-
-## Completed
-- 已完成阶段及对应文件
+## Checkpoint
+- 准确停点、环境前提、任务改动与原有改动的边界。
 
 ## Decisions
-- 已确认的关键决策及依据
+- 已选方案、证据、必要的替代方案，以及重新评估条件。
 
-## Repository State
-| Repository | Branch | Changed Files | Working Tree Notes |
-|------------|--------|---------------|--------------------|
-|  |  |  |  |
+## Attempts / Unknowns
+- 已尝试路径及实际结果、尚未证实的假设、阻塞和解除条件。
 
-## Review / Verify
-- Review Status:
-- Verified:
-- Not Verified:
-- Verification Contract: `verification.json` 的状态和剩余 VT
+## Next Steps
+- 按顺序记录动作、执行位置、预期结果和停止条件；第一步必须能直接执行。
 
 ## Required Context
-- 下一执行者必须读取的文件
-
-## Authorization
-- 已授权且仍适用的动作
-- 未授权动作
-
-## Blockers
-- 无则写“无”
+- `manifest.md#Scope`：确认目标与范围。使用任务相对文件路径和准确的二级标题，补充阅读原因。
 ```
+
+`task summary` 默认最多 8000 字符，整节延后并列出定位符，不截断章节中间内容。
+使用 `--section <file>#<section>` 展开 Markdown 二级标题或 JSON 顶层字段；`--format json` 返回完整摘要结构和警告。
+旧版 handoff 继续可读，其 Required Context 和 Authorization 也进入摘要；首次迁移保留 `handoff-legacy.md` 原文，并在摘要中提供入口。迁移前整理有效判断和授权来源，旧文档不能被视为已通过新鲜度检查。
+检查发现版本变化时先重新判断受影响结论，不得仅重新生成来清除警告。产物结构检查与恢复新鲜度检查分离，正常阶段推进不会因上一次交接过期而被锁住。
 
 接手任务的执行者必须：
 

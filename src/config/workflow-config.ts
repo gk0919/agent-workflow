@@ -35,6 +35,7 @@ const PROFILE_EXTENSION_MAX_DEPTH = 8;
 const PROFILE_EXTENSION_KEYS = new Set([
   '$schema',
   'description',
+  'capabilitySkills',
   'evals',
   'extends',
   'governance',
@@ -312,6 +313,25 @@ export const validateWorkflowProfile = (profile: unknown): string[] => {
   if (!isJsonObject(profile)) {
     return ['Workflow Profile 必须是对象'];
   }
+  if (profile.capabilitySkills !== undefined) {
+    if (!isJsonObject(profile.capabilitySkills)) {
+      errors.push('capabilitySkills 必须是能力到 Skill 定位符的映射');
+    } else {
+      Object.entries(profile.capabilitySkills).forEach(([capability, locator]) => {
+        try {
+          if (!IDENTIFIER_PATTERN.test(capability)) {
+            throw new Error('capabilitySkills 包含非法能力标识');
+          }
+          const skillPath = resolveWorkflowLocator(locator, 'capabilitySkills');
+          if (!skillPath.endsWith('SKILL.md') || !existsSync(skillPath)) {
+            throw new Error(`capabilitySkills.${capability} 必须指向现存 SKILL.md`);
+          }
+        } catch (error: unknown) {
+          errors.push(errorMessage(error));
+        }
+      });
+    }
+  }
   if (profile.schemaVersion !== 1) {
     errors.push('Workflow Profile schemaVersion 必须为 1');
   }
@@ -570,8 +590,16 @@ export const activeProfilePathFor = (config = loadWorkflowConfig()): string =>
   process.env.AI_WORKFLOW_PROFILE?.trim() || config.activeProfile;
 
 /** Loads the Profile that controls the current process. */
-export const loadActiveProfile = (config = loadWorkflowConfig()): WorkflowProfile =>
-  loadWorkflowProfile(activeProfilePathFor(config));
+export const loadActiveProfile = (config = loadWorkflowConfig()): WorkflowProfile => {
+  const profile = loadWorkflowProfile(activeProfilePathFor(config));
+  // Standalone profiles written before capability bindings inherit package defaults.
+  if (profile.capabilitySkills === undefined) {
+    profile.capabilitySkills = loadWorkflowProfile(
+      'workflow:resources/profiles/default/profile.json',
+    ).capabilitySkills ?? {};
+  }
+  return profile;
+};
 
 /** Resolves all configured runtime roots to workspace-contained absolute paths. */
 export const loadWorkflowPaths = (config = loadWorkflowConfig()): WorkflowPaths =>

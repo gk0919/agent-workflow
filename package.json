@@ -48,6 +48,7 @@
     "./schemas/workflow-definition-bundle.json": "./resources/schemas/workflow-definition-bundle.schema.json",
     "./schemas/workflow-transition.json": "./resources/schemas/workflow-transition.schema.json",
     "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
+    "./schemas/handoff-state.json": "./resources/schemas/handoff-state.schema.json",
     "./package.json": "./package.json"
   },
   "bin": {

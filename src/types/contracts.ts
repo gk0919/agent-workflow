@@ -79,6 +79,7 @@ export interface WorkflowProfile {
     requiredForTypes: string[];
   };
   review: { defaultSkill: string };
+  capabilitySkills?: Record<string, string>;
   schemaVersion: 1;
   setup: { requiredPaths: string[] };
   sourceProviders: Record<string, SourceProvider>;
@@ -92,6 +93,7 @@ export interface RouteTaskFlow {
 }
 
 export interface RouteStage {
+  capabilities?: string[];
   docs: string[];
   next: string;
   references?: string[];
@@ -133,6 +135,7 @@ export interface RoutesConfig {
   riskCatalog: string[];
   routes: Record<string, RouteDefinition>;
   verificationContract: {
+    executionBaselineRequiredForSpecsCreatedOnOrAfter: string;
     requiredForSpecsCreatedOnOrAfter: string;
     version: number;
   };

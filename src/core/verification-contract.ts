@@ -6,12 +6,16 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import type { Ajv2020 } from 'ajv/dist/2020.js';
+import type { FormatsPlugin } from 'ajv-formats';
 import { loadWorkflowPaths } from '../config/workflow-config.js';
 import { workflowRoot } from '../config/workspace-paths.js';
 import { containsSensitiveData } from './knowledge-state.js';
 import { workspaceRoot } from './context-budget.js';
 import { errorMessage, isJsonObject } from '../types/guards.js';
+import { validateVerificationBaseline } from './verification-baseline.js';
 
 interface ArrayValidationOptions {
   label: string;
@@ -50,6 +54,14 @@ const samplePath = path.join(
   'verification-contract.sample.json',
 );
 const tasksRoot = loadWorkflowPaths().tasksRoot;
+const require = createRequire(import.meta.url);
+const Ajv = (require('ajv/dist/2020.js') as { default: typeof Ajv2020 }).default;
+const addFormats = (require('ajv-formats') as { default: FormatsPlugin }).default;
+const ajv = new Ajv({ allErrors: true, strict: true });
+addFormats(ajv);
+const validateV2Schema = ajv.compile(JSON.parse(readFileSync(path.join(
+  workflowRoot, 'resources/schemas/verification-contract-v2.schema.json',
+), 'utf8')));
 const TASK_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const GOAL_ID_PATTERN = /^G[1-9][0-9]*$/;
 const ACCEPTANCE_ID_PATTERN = /^AC[1-9][0-9]*$/;
@@ -251,6 +263,7 @@ const validateTestPoint = (
   testPoint: unknown,
   index: number,
   acceptanceIds: Set<string>,
+  schemaVersion: unknown,
   errors: string[],
 ): void => {
   const label = `testPoints[${index}]`;
@@ -267,6 +280,7 @@ const validateTestPoint = (
       'capability',
       'evidence',
       'blocker',
+      ...(schemaVersion === 2 ? ['executedAgainst'] : []),
     ],
     label,
     errors,
@@ -319,6 +333,10 @@ const validateTestPoint = (
   const status = typeof record.status === 'string' ? record.status : '';
   const method = typeof record.method === 'string' ? record.method : '';
   const executor = typeof record.executor === 'string' ? record.executor : '';
+  if (schemaVersion === 2 && (record.executedAgainst !== undefined || ['passed', 'failed'].includes(status))) {
+    validateVerificationBaseline(record.executedAgainst)
+      .forEach((error) => errors.push(`${label}.${error}`));
+  }
   if (['passed', 'failed'].includes(status) && evidenceItems.length === 0) {
     errors.push(`${label}: ${status} 必须提供 evidence`);
   }
@@ -370,6 +388,10 @@ export const validateVerificationContract = (
 ): string[] => {
   const errors: string[] = [];
   const record = isJsonObject(contract) ? contract : {};
+  if (record.schemaVersion === 2 && !validateV2Schema(contract)) {
+    errors.push(...(validateV2Schema.errors ?? []).map((error) =>
+      `verification v2 ${error.instancePath}: ${error.message}`));
+  }
   rejectUnknownKeys(
     contract,
     [
@@ -386,8 +408,8 @@ export const validateVerificationContract = (
     'contract',
     errors,
   );
-  if (record.schemaVersion !== 1) {
-    errors.push('schemaVersion 必须为 1');
+  if (record.schemaVersion !== 1 && record.schemaVersion !== 2) {
+    errors.push('schemaVersion 必须为 1 或 2');
   }
   const taskId = typeof record.taskId === 'string' ? record.taskId : '';
   if (!TASK_ID_PATTERN.test(taskId)) {
@@ -557,7 +579,7 @@ export const validateVerificationContract = (
     errors,
   );
   testPoints.forEach((testPoint, index) =>
-    validateTestPoint(testPoint, index, acceptanceIds, errors));
+    validateTestPoint(testPoint, index, acceptanceIds, record.schemaVersion, errors));
 
   acceptanceIds.forEach((acceptanceId) => {
     if (!plannedChanges.some((change) => {

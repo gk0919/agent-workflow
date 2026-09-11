@@ -73,6 +73,7 @@ const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   knowledge: command('dist/src/core/knowledge-state.js'),
   task: command('dist/src/core/task-state.js'),
   'task:test': command('dist/tests/contract/task-state-regression.js'),
+  'handoff:test': command('dist/tests/contract/handoff-regression.js'),
   worktree: command('dist/src/core/worktree-state.js'),
   'worktree:test': command('dist/tests/contract/worktree-state-regression.js'),
   'quality:js': command('dist/src/validators/check-js-diff.js'),

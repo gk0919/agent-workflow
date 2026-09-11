@@ -14,6 +14,7 @@ import {
 import { validateTaskArtifactsById } from '../validators/check-task-artifacts.js';
 import type { RoutesConfig } from '../types/contracts.js';
 import { errorMessage } from '../types/guards.js';
+import { requirePublishedTask } from './task-checkpoint.js';
 
 type TaskArtifacts = Record<string, string | null | undefined>;
 
@@ -200,6 +201,7 @@ export const guardRouteTask = (
     taskId,
   });
   if (taskState) {
+    requirePublishedTask(taskDirectory, true);
     const artifactErrors = validateTaskArtifactsById(taskId, {
       root: tasksRoot,
     });

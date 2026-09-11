@@ -77,12 +77,15 @@ entry_mode: pool | direct
 source_type: demand | defect
 source_sn:
 spec_level: S | M | L
-contract_version: 1
+contract_version: 2
 status: draft | conditional | confirmed
 created_at:
 updated_at:
 ---
 ```
+
+`contract_version` 必须与 `verification.json` 的 `schemaVersion` 一致。当前要求版本 2
+（含执行基线）；在 `routes.json` 的执行基线启用时间之前创建的 Spec 保留版本 1。
 
 状态为 `draft`、`conditional` 或 `confirmed`；只有 `confirmed` 可以完成 Spec Gate。
 继续澄清时更新同一文件。

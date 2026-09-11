@@ -1,14 +1,7 @@
+import { createHash } from 'node:crypto';
 import {
-  createHash,
-  randomUUID,
-} from 'node:crypto';
-import {
-  closeSync,
   existsSync,
-  openSync,
   readFileSync,
-  renameSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -26,15 +19,19 @@ import type {
 } from './task-lifecycle.js';
 import { recordWorkflowEvent } from './runtime-log.js';
 import { errorMessage } from '../types/guards.js';
+import { selectTask, requireSelectedTask } from './task-selection.js';
+import { main as routeMain } from './route.js';
+import { persistentCommands, runPersistentCommand, persistentExitGate, reopenPlan, approvedPlanUnchanged, diagnosePersistentTask } from './task-persistence.js';
+import { persistentTask, requirePublishedTask, publishCheckpoint } from './task-checkpoint.js';
+import { replaceFileAtomically, withManifestLock } from './task-files.js';
+export { replaceFileAtomically, withManifestLock } from './task-files.js';
+import {
+  checkHandoff, collectTaskSummary, prepareHandoff, readSummarySection,
+  renderTaskSummary, taskDirectoryFor,
+} from './task-handoff.js';
 
 interface TaskUpdateOptions extends Omit<TaskTransitionOptions, 'command'> {
   expectedLastUpdated?: string;
-}
-
-interface ManifestSection {
-  body: string;
-  bodyEnd: number;
-  bodyStart: number;
 }
 
 type ArtifactValidator = (
@@ -44,8 +41,6 @@ type ArtifactValidator = (
 
 const tasksRoot = loadWorkflowPaths().tasksRoot;
 const TASK_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const SUMMARY_SECTION_LIMIT = 1600;
-const SUMMARY_OUTPUT_LIMIT = 8000;
 const hashContent = (content: string): string => createHash('sha256')
   .update(content, 'utf8')
   .digest('hex');
@@ -61,56 +56,6 @@ const readArgumentValue = (args: string[], name: string): string => {
   return value.startsWith('--') ? '' : value;
 };
 
-const findSection = (content: string, sectionName: string): ManifestSection => {
-  const headingPattern = new RegExp(`^## ${sectionName}\\r?$`, 'm');
-  const headingMatch = headingPattern.exec(content);
-  if (!headingMatch) {
-    throw new Error(`manifest 缺少 ${sectionName} 小节`);
-  }
-
-  const sectionBodyStart = headingMatch.index + headingMatch[0].length;
-  const remainingContent = content.slice(sectionBodyStart);
-  const nextHeadingOffset = remainingContent.search(/^##\s/m);
-  const sectionBodyEnd = nextHeadingOffset < 0
-    ? content.length
-    : sectionBodyStart + nextHeadingOffset;
-  return {
-    body: content.slice(sectionBodyStart, sectionBodyEnd),
-    bodyStart: sectionBodyStart,
-    bodyEnd: sectionBodyEnd,
-  };
-};
-
-const readOptionalSection = (content: string, sectionName: string): string => {
-  try {
-    return findSection(content, sectionName).body.trim();
-  } catch {
-    return '';
-  }
-};
-
-const compactText = (content: string, limit = SUMMARY_SECTION_LIMIT): string => {
-  const characters = Array.from(content);
-  if (characters.length <= limit) {
-    return content;
-  }
-
-  const edgeLength = Math.floor((limit - 80) / 2);
-  return [
-    characters.slice(0, edgeLength).join(''),
-    `\n... omitted ${characters.length - edgeLength * 2} chars ...\n`,
-    characters.slice(-edgeLength).join(''),
-  ].join('');
-};
-
-const selectSections = (content: string, headings: string[]): string => headings
-  .map((heading) => {
-    const body = readOptionalSection(content, heading);
-    return body ? `## ${heading}\n${compactText(body)}` : '';
-  })
-  .filter(Boolean)
-  .join('\n\n');
-
 export const validateTaskUpdateArtifacts = (
   taskId: string,
   validate: ArtifactValidator = validateTaskArtifactsById as ArtifactValidator,
@@ -121,60 +66,6 @@ export const validateTaskUpdateArtifacts = (
   const artifactErrors = validate(taskId, { manifestContent });
   if (artifactErrors.length > 0) {
     throw new Error(`任务产物检查未通过：${artifactErrors[0]}`);
-  }
-};
-
-export const replaceFileAtomically = (filePath: string, content: string): void => {
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporaryPath, content, {
-      encoding: 'utf8',
-      flag: 'wx',
-    });
-    renameSync(temporaryPath, filePath);
-  } finally {
-    if (existsSync(temporaryPath)) {
-      unlinkSync(temporaryPath);
-    }
-  }
-};
-
-export const withManifestLock = <T>(manifestPath: string, callback: () => T): T => {
-  const lockPath = `${manifestPath}.lock`;
-  let lockDescriptor: number | undefined;
-  try {
-    lockDescriptor = openSync(lockPath, 'wx');
-    writeFileSync(
-      lockDescriptor,
-      `${JSON.stringify({ pid: process.pid, timestamp: new Date().toISOString() })}\n`,
-      'utf8',
-    );
-  } catch (error: unknown) {
-    if (lockDescriptor !== undefined) {
-      closeSync(lockDescriptor);
-      if (existsSync(lockPath)) {
-        unlinkSync(lockPath);
-      }
-    }
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new Error(`任务 manifest 正在被其他执行者更新：${lockPath}`);
-    }
-    throw error;
-  }
-
-  if (lockDescriptor === undefined) {
-    throw new Error(`无法获取任务 manifest 锁：${lockPath}`);
-  }
-  try {
-    return callback();
-  } finally {
-    try {
-      closeSync(lockDescriptor);
-    } finally {
-      if (existsSync(lockPath)) {
-        unlinkSync(lockPath);
-      }
-    }
   }
 };
 
@@ -197,6 +88,10 @@ const updateTask = (
     () => {
       const originalContent = readFileSync(manifestPath, 'utf8');
       const currentModel = readManifestModel(originalContent);
+      const checkpoint = requirePublishedTask(path.dirname(manifestPath));
+      if (checkpoint && transitionOptions.expectedLastUpdated !== currentModel.lastUpdated) {
+        throw new Error(`持久任务更新必须提供 --expected-last-updated ${currentModel.lastUpdated}`);
+      }
       if (transitionOptions.expectedLastUpdated &&
           transitionOptions.expectedLastUpdated !== currentModel.lastUpdated) {
         throw new Error(
@@ -204,11 +99,22 @@ const updateTask = (
           `${transitionOptions.expectedLastUpdated}，当前 ${currentModel.lastUpdated}`,
         );
       }
+      persistentExitGate(path.dirname(manifestPath), command);
+      // A recorded approval only proves scope applicability; entering Implement still
+      // requires the current session's confirmation, so never infer it from the file.
+      const continuation = Boolean(checkpoint && transitionOptions.to === 'Implement' &&
+        approvedPlanUnchanged(path.dirname(manifestPath)));
+      if (transitionOptions.userApproved && transitionOptions.to === 'Implement' && checkpoint &&
+          !(transitionOptions.approvalSource || transitionOptions.evidence || transitionOptions.reason || '').trim()) {
+        throw new Error('持久任务的实施批准必须提供 --approval-source（当前会话用户批准的依据），不能用占位文本代替');
+      }
       const updatedContent = transitionManifestContent(
         originalContent,
         {
           ...transitionOptions,
           command,
+          continuation,
+          userApproved: Boolean(transitionOptions.userApproved),
         },
       );
       validateTaskUpdateArtifacts(
@@ -220,7 +126,14 @@ const updateTask = (
           hashContent(originalContent)) {
         throw new Error('manifest 在更新期间被外部修改，已拒绝覆盖');
       }
+      if (command === 'reopen') reopenPlan(path.dirname(manifestPath), transitionOptions.to ?? '');
       replaceFileAtomically(manifestPath, updatedContent);
+      if (checkpoint) publishCheckpoint(path.dirname(manifestPath), {
+        reason: transitionOptions.reason || transitionOptions.evidence || transitionOptions.action || command,
+        previous: checkpoint,
+        ...(transitionOptions.userApproved && transitionOptions.to === 'Implement'
+          ? { approvalSource: transitionOptions.approvalSource || transitionOptions.evidence || transitionOptions.reason } : {}),
+      });
       return {
         originalModel: currentModel,
         updatedModel: readManifestModel(updatedContent),
@@ -253,68 +166,28 @@ const updateTask = (
   process.stdout.write(`任务状态已更新并通过产物检查：${taskId} (${command})\n`);
 };
 
-const summarizeTask = (taskId: string): void => {
-  if (!TASK_ID_PATTERN.test(taskId)) {
-    throw new Error('任务 ID 只能包含小写字母、数字和连字符');
-  }
-
-  const taskDirectory = path.join(tasksRoot, taskId);
-  const manifestPath = path.join(taskDirectory, 'manifest.md');
-  if (!existsSync(manifestPath)) {
-    throw new Error(`任务 manifest 不存在：${taskId}`);
-  }
-
-  const output = [
-    '# Task Resume Summary',
-    `- Task: ${taskId}`,
-    '',
-    selectSections(
-      readFileSync(manifestPath, 'utf8'),
-      ['Identity', 'Repository Matrix', 'Stage Status', 'Resume'],
-    ),
-  ];
-
-  const sourcePath = path.join(taskDirectory, 'source.md');
-  if (existsSync(sourcePath)) {
-    output.push(
-      '',
-      '# Source Summary',
-      selectSections(
-        readFileSync(sourcePath, 'utf8'),
-        ['Identity', 'Selection', 'Source Gaps', 'User Additions'],
-      ),
-    );
-  }
-
-  const handoffPath = path.join(taskDirectory, 'handoff.md');
-  if (existsSync(handoffPath)) {
-    output.push(
-      '',
-      '# Handoff Summary',
-      selectSections(
-        readFileSync(handoffPath, 'utf8'),
-        ['Task', 'Completed', 'Decisions', 'Repository State', 'Review / Verify', 'Blockers'],
-      ),
-    );
-  }
-
-  const summary = output.join('\n');
-  const summaryLength = Array.from(summary).length;
-  if (summaryLength > SUMMARY_OUTPUT_LIMIT) {
-    throw new Error(
-      `任务摘要为 ${summaryLength} 字符，超过 ${SUMMARY_OUTPUT_LIMIT} 字符上限；` +
-      '请精简 Resume、Source Gaps 或 User Additions 后重试',
-    );
-  }
-
-  process.stdout.write(`${summary}\n`);
+const handoffTask = (taskId: string): void => {
+  const directory = taskDirectoryFor(taskId);
+  withManifestLock(path.join(directory, 'manifest.md'), () => {
+    const legacyPath = path.join(directory, 'handoff-legacy.md');
+    if (!existsSync(path.join(directory, 'handoff-state.json')) &&
+        existsSync(path.join(directory, 'handoff.md')) && !existsSync(legacyPath)) {
+      writeFileSync(legacyPath, readSummarySection(directory, 'handoff.md'), { encoding: 'utf8', flag: 'wx' });
+    }
+    const { document, state } = prepareHandoff(directory, taskId);
+    // Publish the baseline last. Interrupted writes remain detectable on the next check.
+    replaceFileAtomically(path.join(directory, 'handoff.md'), document);
+    replaceFileAtomically(path.join(directory, 'handoff-state.json'), `${JSON.stringify(state, null, 2)}\n`);
+  });
+  process.stdout.write(`交接包已生成：${taskId}\n`);
 };
 
 export const main = (args: string[] = process.argv.slice(2)): number => {
   const [command] = args;
-  const taskId = readArgumentValue(args, '--task');
+  let taskId = readArgumentValue(args, '--task');
   const transitionOptions = {
     action: readArgumentValue(args, '--action'),
+    approvalSource: readArgumentValue(args, '--approval-source'),
     evidence: readArgumentValue(args, '--evidence'),
     expectedLastUpdated: readArgumentValue(args, '--expected-last-updated'),
     reason: readArgumentValue(args, '--reason'),
@@ -324,21 +197,87 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
   };
 
   try {
-    if (['start', 'advance', 'skip', 'block', 'resume', 'complete'].includes(command ?? '')) {
+    if (args.filter((argument) => argument === '--task').length > 1 ||
+        (args.includes('--task') && !taskId)) throw new Error('--task 必须且只能提供一个有效任务 ID');
+    if (persistentCommands.has(command ?? '')) {
+      if (!taskId) taskId = requireSelectedTask(selectTask()).taskId;
+      return runPersistentCommand(command!, args, taskId);
+    }
+    if (['current', 'prepare', 'continue', 'summary', 'handoff', 'handoff-check'].includes(command ?? '')) {
+      const selection = selectTask(taskId);
+      if (command === 'current') {
+        const format = readArgumentValue(args, '--format') || 'text';
+        if (!['json', 'text'].includes(format)) throw new Error('--format must be text or json');
+        if (format === 'json') {
+          process.stdout.write(`${JSON.stringify(selection, null, 2)}\n`);
+          return selection.status === 'selected' ? 0 : 1;
+        }
+        const selected = requireSelectedTask(selection);
+        process.stdout.write(`当前任务：${selected.taskId} | ${selected.currentStage} | ${selected.status}\n`);
+        return 0;
+      }
+      taskId = requireSelectedTask(selection).taskId;
+      if (command === 'prepare' || command === 'continue') {
+        const selected = requireSelectedTask(selection);
+        if (command === 'continue' && selected.status === 'complete') {
+          process.stdout.write(`任务 ${taskId} 已完成，没有待续接阶段。\n`);
+          return 0;
+        }
+        const route = command === 'prepare' ? 'task-handoff' : 'portable-resume';
+        const stage = command === 'prepare' ? 'prepare' : 'resume';
+        process.stdout.write(`已选择任务：${taskId} | ${selected.currentStage} | ${selected.status}\n`);
+        const routeResult = routeMain(['--route', route, '--stage', stage, '--entry', selected.entry, '--materialize']);
+        if (routeResult !== 0) return routeResult;
+        const directory = taskDirectoryFor(taskId);
+        process.stdout.write(`${renderTaskSummary(collectTaskSummary(directory, taskId))}\n`);
+        if (command === 'continue' && persistentTask(directory)) {
+          const diagnosis = diagnosePersistentTask(directory);
+          process.stdout.write(`${JSON.stringify(diagnosis, null, 2)}\n`);
+          return diagnosis.issues.length ? 1 : 0;
+        }
+        if (command === 'continue' && existsSync(path.join(directory, 'handoff-state.json'))) {
+          const errors = checkHandoff(directory, taskId);
+          if (errors.length) throw new Error(`交接需要核对：${errors.join('; ')}`);
+        }
+        process.stdout.write(command === 'prepare'
+          ? `请由 Agent 更新任务 ${taskId} 的交接说明，执行 task handoff --task ${taskId} 和 handoff-check；无需用户填写文件或运行命令。\n`
+          : `请按已加载上下文继续任务 ${taskId}；先处理阻塞或过期事实，再使用 next --task ${taskId}，不要重复已完成工作或自动解除 blocked。\n`);
+        return 0;
+      }
+    }
+    if (['start', 'advance', 'skip', 'block', 'resume', 'complete', 'reopen'].includes(command ?? '')) {
       updateTask(taskId, command as TaskTransitionCommand, transitionOptions);
       return 0;
     }
     if (command === 'summary') {
-      summarizeTask(taskId);
+      const directory = taskDirectoryFor(taskId);
+      const section = readArgumentValue(args, '--section');
+      const format = readArgumentValue(args, '--format') || 'text';
+      if (!['text', 'json'].includes(format)) throw new Error('--format must be text or json');
+      const summary = section ? null : collectTaskSummary(directory, taskId);
+      process.stdout.write((section ? readSummarySection(directory, section)
+        : format === 'json' ? JSON.stringify(summary, null, 2) : renderTaskSummary(summary!)) + '\n');
+      return 0;
+    }
+    if (command === 'handoff') {
+      handoffTask(taskId);
+      return 0;
+    }
+    if (command === 'handoff-check') {
+      const errors = checkHandoff(taskDirectoryFor(taskId), taskId);
+      if (errors.length) throw new Error(errors.join('; '));
+      process.stdout.write(`交接包检查通过：${taskId}\n`);
       return 0;
     }
 
     process.stderr.write(
       'Usage: agent-workflow task ' +
-      '<start|advance|skip|block|resume|complete|summary> --task <task-id> ' +
+      '<current|prepare|continue|summary|handoff|handoff-check|init|status|checkpoint|item|migrate|verify-begin|verify-record> [--task <task-id>] ' +
+      'or <start|advance|skip|block|resume|complete|reopen> --task <task-id> ' +
+      '[--format text|json] [--section <file>#<section>] ' +
       '[--to <stage>] [--stage <stage>] [--action <text>] ' +
       '[--evidence <text>] [--reason <text>] ' +
-      '[--user-approved] ' +
+      '[--user-approved] [--approval-source <text>] ' +
       '[--expected-last-updated <date-time>]\n',
     );
     return 1;

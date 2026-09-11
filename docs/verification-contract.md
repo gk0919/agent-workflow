@@ -23,9 +23,12 @@ Goal (G)
 ## 标准流程
 
 正式 Spec 创建 `.agent-workflow/tasks/local/<task-id>/verification.json`，并在 `spec.md`
-frontmatter 声明 `contract_version: 1`。结构遵守
+frontmatter 声明 `contract_version`。当前要求为版本 2，结构遵守
+[`verification-contract-v2.schema.json`](../resources/schemas/verification-contract-v2.schema.json)；
+历史任务保留版本 1，结构遵守
 [`verification-contract.schema.json`](../resources/schemas/verification-contract.schema.json)，
 示例见 [`verification-contract.sample.json`](../resources/examples/verification-contract.sample.json)。
+`spec.md` 的 `contract_version` 必须与 `verification.json` 的 `schemaVersion` 一致。
 
 生命周期：
 
@@ -35,9 +38,48 @@ frontmatter 声明 `contract_version: 1`。结构遵守
 3. Review：核对实际文件、目标映射、范围扩大和错误验证声明。
 4. Verify：逐项更新 VT 状态和证据；全部满足时为 `verified`，仍有缺口时为 `conditional`。
 
-`routes.json.verificationContract.requiredForSpecsCreatedOnOrAfter` 是启用时间的唯一事实源。
-此前创建且没有 `contract_version` 的历史任务继续按旧格式读取；此后新 Spec 必须声明版本
-并创建契约。一旦声明版本或创建 `verification.json`，两者必须成对存在并通过确定性校验。
+`routes.json.verificationContract` 是启用时间的唯一事实源：`version` 为当前要求的契约版本；
+`requiredForSpecsCreatedOnOrAfter` 之后创建的 Spec 必须创建契约；
+`executionBaselineRequiredForSpecsCreatedOnOrAfter` 之后创建的 Spec 必须声明
+`contract_version: 2`。此前创建的历史任务继续按旧版本读取；一旦声明版本或创建
+`verification.json`，两者必须成对存在并通过确定性校验。
+
+### 执行基线（版本 2）
+
+版本 2 在版本 1 之上只增加 `testPoints[].executedAgainst`：`status` 为 `passed` 或 `failed`
+时必需，其他状态必须省略。字段为：
+
+- `executedAt`：毫秒精度的 UTC 执行时间。
+- `repositories`：1–100 个执行基线仓库，每项含 `repository`、`root`、`head`、`fingerprint`。
+- `definitionHash`：本次执行所依据的 G / AC / OOS / C 与该校验点定义的哈希。
+- `environment`：环境说明。
+
+持久任务由 CLI 记录基线，不手工填写 `executedAgainst`：
+
+```text
+agent-workflow task verify-begin --task <task-id> --test <VT-id> \
+  --evidence <task-relative-file>#<section> --environment <description> \
+  --reason <reason> --expected-revision <revision>
+agent-workflow task verify-record --task <task-id> --test <VT-id> --status passed \
+  --evidence <task-relative-file>#<section> --reason <reason> \
+  --expected-revision <revision>
+```
+
+`verify-begin` 必须在执行测试前登记，并要求证据文件在登记后新建，不能复用历史输出；
+`verify-record` 只在仓库基线、验证定义与登记时一致时接受 `passed` / `failed`。
+`blocked` / `not-applicable` 会清除未收口的开始记录。
+
+`task status` 按 `current` / `stale` / `unknown` 报告新鲜度：缺少基线、契约仍为版本 1、
+验证定义变化或仓库无法判定时都是 `unknown`。持久任务的 Verify 与最终完成要求所有
+`passed` 点均为 `current`；代码变化后重新验证，或经有依据的适用性评估后重新登记基线。
+重新保存检查点只更新观察基线，不能把旧的 `passed` 绑定到新代码上，也不清除 `stale`。
+
+仍为版本 1 的历史任务继续可读，其已通过结论按 `unknown` 读取。升级为持久任务前先升级
+契约版本并重新记录证据；`verify-begin` 与完成门禁会给出可操作的版本错误，不允许沿用
+没有执行基线的旧结论。
+
+CI 证据沿用现有公开契约，通过证据文件哈希、`check ID` 和 `commitSha` 引用。`HEAD` 一致但
+工作树有未提交改动时，不能把 CI 结果当作当前改动已通过。
 
 ### 验证方式
 

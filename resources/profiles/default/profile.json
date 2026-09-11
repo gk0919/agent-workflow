@@ -63,6 +63,9 @@
   "review": {
     "defaultSkill": ""
   },
+  "capabilitySkills": {
+    "handoff": "workflow:resources/skills/task-handoff/SKILL.md"
+  },
   "issueTracking": {
     "enabled": false,
     "pattern": "",

@@ -3,7 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { workspaceRoot as repositoryRoot } from '../config/workspace-paths.js';
-import { loadWorkflowPaths } from '../config/workflow-config.js';
+import { loadActiveProfile, loadWorkflowPaths, resolveWorkflowLocator } from '../config/workflow-config.js';
 
 const skillsRoot = loadWorkflowPaths().skillsRoot;
 const skillsDisplayPath = path.relative(repositoryRoot, skillsRoot)
@@ -35,7 +35,7 @@ const findRelativeLinks = (content: string): string[] =>
   .filter((target): target is string =>
     typeof target === 'string' && !/^(?:https?:|mailto:|#)/i.test(target));
 
-/** Validates every Skill below the configured project Skill root. */
+/** Validates project Skills and capabilities selected by the active Profile. */
 export const main = (): number => {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -45,14 +45,16 @@ export const main = (): number => {
     return 1;
   }
 
-  const directories = readdirSync(skillsRoot, { withFileTypes: true })
+  const directories = [...new Set([...readdirSync(skillsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
+    .map((entry) => path.join(skillsRoot, entry.name)),
+  ...Object.values(loadActiveProfile().capabilitySkills ?? {})
+    .map((locator) => path.dirname(resolveWorkflowLocator(locator))),
+  ])].sort();
   const names = new Map<string, string>();
 
-  directories.forEach((directoryName) => {
-    const skillDirectory = path.join(skillsRoot, directoryName);
+  directories.forEach((skillDirectory) => {
+    const directoryName = path.basename(skillDirectory);
     const skillFile = path.join(skillDirectory, 'SKILL.md');
 
     if (!existsSync(skillFile)) {

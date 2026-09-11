@@ -277,8 +277,9 @@ export const validateRoutes = (
     errors.push('routes.json version 必须是正整数');
   }
   const verificationContract = config.verificationContract || {};
-  if (verificationContract.version !== 1) {
-    errors.push('verificationContract.version 必须为 1');
+  if (!Number.isInteger(verificationContract.version) ||
+      ![1, 2].includes(verificationContract.version)) {
+    errors.push('verificationContract.version 必须为 1 或 2');
   }
   const verificationContractStart = Date.parse(
     verificationContract.requiredForSpecsCreatedOnOrAfter || '',
@@ -287,6 +288,22 @@ export const validateRoutes = (
     errors.push(
       'verificationContract.requiredForSpecsCreatedOnOrAfter 必须是合法 date-time',
     );
+  }
+  // Version 2 adds executedAgainst. The enablement time is required so that specs
+  // created before the cutover keep their declared version instead of failing late.
+  if (verificationContract.version === 2) {
+    const baselineStart = Date.parse(
+      verificationContract.executionBaselineRequiredForSpecsCreatedOnOrAfter || '',
+    );
+    if (Number.isNaN(baselineStart)) {
+      errors.push(
+        'verificationContract.executionBaselineRequiredForSpecsCreatedOnOrAfter 必须是合法 date-time',
+      );
+    } else if (!Number.isNaN(verificationContractStart) && baselineStart < verificationContractStart) {
+      errors.push(
+        'verificationContract.executionBaselineRequiredForSpecsCreatedOnOrAfter 不得早于 requiredForSpecsCreatedOnOrAfter',
+      );
+    }
   }
   if (baseDocs.length === 0) {
     errors.push('routes.json 缺少 baseDocs');
@@ -527,6 +544,11 @@ export const validateRoutes = (
         (!options.budgetScope.stage || options.budgetScope.stage === stageName)
       );
       const docs = Array.isArray(stage.docs) ? stage.docs : [];
+      if (stage.capabilities !== undefined && (!Array.isArray(stage.capabilities) ||
+          stage.capabilities.some((item) => typeof item !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item)) ||
+          new Set(stage.capabilities).size !== stage.capabilities.length)) {
+        errors.push(`${routeName}/${stageName}: capabilities 必须是不重复的能力标识数组`);
+      }
       const stageReferences = Array.isArray(stage.references)
         ? stage.references
         : [];
@@ -776,7 +798,16 @@ export const buildRoutePacket = ({
     ...stage.docs,
     ...referenceDocs,
   ]);
-  const skillDocs = unique(skills).map(resolveSkill);
+  const bindings = loadActiveProfile().capabilitySkills ?? {};
+  const capabilityDocs = (stage.capabilities ?? []).map((capability) => {
+    const locator = bindings[capability];
+    if (!locator) {
+      throw new Error(`当前 Profile 未绑定能力 ${capability}`);
+    }
+    resolveWorkflowLocator(locator, `capability ${capability}`);
+    return locator;
+  });
+  const skillDocs = unique([...skills.map(resolveSkill), ...capabilityDocs]);
   const materializeDocs = unique([
     ...stage.docs,
     ...skillDocs,

@@ -239,6 +239,7 @@ Codex、Qoder 和支持 `AGENTS.md` 的 TRAE 版本直接复用根目录入口�
 | `review-only` | `direct`, `pool` | `capture` → `review` → `verify` |
 | `workflow-maintenance` | `not-applicable` | `inspect` → `implement` → `review` → `verify` → `git-inspect` |
 | `git-only` | `not-applicable` | `inspect` → `action` → `report` |
+| `task-handoff` | `direct`, `pool`, `not-applicable` | `prepare` |
 | `portable-resume` | `direct`, `pool`, `not-applicable` | `resume` |
 <!-- ai-workflow:routes:end -->
 

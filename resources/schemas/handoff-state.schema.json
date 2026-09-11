@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/handoff-state.schema.json",
+  "title": "Task Handoff Freshness Record",
+  "type": "object",
+  "required": ["schemaVersion", "taskId", "generatedAt", "artifacts", "repositories", "documentHash"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "taskId": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "documentHash": {"$ref": "#/$defs/hash"},
+    "artifacts": {
+      "type": "object", "required": ["manifest.md", "handoff-notes.md"],
+      "properties": {
+        "manifest.md": {"$ref": "#/$defs/hash"},
+        "handoff-notes.md": {"$ref": "#/$defs/hash"}
+      },
+      "additionalProperties": {"$ref": "#/$defs/hash"}
+    },
+    "repositories": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["repository", "root", "bindingId", "branch", "head", "fingerprint", "changedFiles"],
+        "properties": {
+          "repository": {"type": "string", "minLength": 1},
+          "root": {"type": "string", "minLength": 1},
+          "bindingId": {"type": ["string", "null"]},
+          "branch": {"type": "string", "minLength": 1},
+          "head": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+          "fingerprint": {"$ref": "#/$defs/hash"},
+          "changedFiles": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+  "additionalProperties": false
+}

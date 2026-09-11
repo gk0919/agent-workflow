@@ -581,7 +581,18 @@ export const main = async (): Promise<number> => {
 
     const cliWorkspace = path.join(temporaryRoot, 'cli-workspace');
     mkdirSync(path.join(cliWorkspace, '.agent-workflow'), { recursive: true });
-    writeFileSync(path.join(cliWorkspace, '.agent-workflow', 'config.json'), '{}\n', 'utf8');
+    // The execution CLI resolves its runtime paths from the workspace config, so an
+    // isolated workspace needs a complete config instead of an empty placeholder.
+    writeFileSync(path.join(cliWorkspace, '.agent-workflow', 'config.json'), `${JSON.stringify({
+      schemaVersion: 1,
+      activeProfile: 'workflow:resources/profiles/default/profile.json',
+      paths: {
+        knowledgeRoot: 'knowledge',
+        runtimeRoot: '.agent-workflow/runtime',
+        skillsRoot: 'skills',
+        tasksRoot: '.agent-workflow/tasks',
+      },
+    }, null, 2)}\n`, 'utf8');
     writeFileSync(path.join(cliWorkspace, 'workflow.json'), JSON.stringify(workflow), 'utf8');
     writeFileSync(path.join(cliWorkspace, 'fixture.json'), JSON.stringify(fixture()), 'utf8');
     const cli = spawnSync(process.execPath, [

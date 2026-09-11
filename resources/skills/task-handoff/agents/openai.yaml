@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Handoff"
+  short_description: "Prepare and resume evidence-backed task handoffs"
+  default_prompt: "Use $task-handoff to prepare or resume the current task with verified context and actionable next steps."

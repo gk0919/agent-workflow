@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/task-manifest-v2.schema.json",
+  "title": "Persistent Task Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "taskId", "runId", "routeId", "stateMode", "status", "currentStage", "lastUpdated", "stages", "nextPendingStage"],
+  "properties": {
+    "schemaVersion": {"const": 2},
+    "taskId": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "runId": {"type": "string", "pattern": "^run-[a-z0-9]{16,64}$"},
+    "routeId": {"type": "string", "minLength": 1},
+    "stateMode": {"const": "Persistent"},
+    "status": {"enum": ["pending", "in_progress", "blocked", "complete"]},
+    "currentStage": {"type": "string", "minLength": 1},
+    "lastUpdated": {"type": "string", "format": "date-time"},
+    "nextPendingStage": {"type": "string", "minLength": 1},
+    "stages": {"type": "array", "minItems": 1, "maxItems": 20, "items": {
+      "type": "object", "required": ["name", "status", "evidence"],
+      "properties": {"name": {"type": "string", "minLength": 1}, "status": {"enum": ["pending", "in_progress", "complete", "blocked", "skipped"]}, "evidence": {"type": "string"}},
+      "additionalProperties": false
+    }}
+  },
+  "additionalProperties": false
+}

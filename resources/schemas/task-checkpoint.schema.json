@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/task-checkpoint.schema.json",
+  "title": "Published Persistent Task Revision",
+  "type": "object",
+  "required": ["schemaVersion", "taskId", "revision", "savedAt", "reason", "artifacts", "repositories", "route", "approval"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "taskId": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "savedAt": {"type": "string", "format": "date-time"},
+    "reason": {"type": "string", "minLength": 1},
+    "artifacts": {"type": "object", "required": ["manifest.md"], "properties": {"manifest.md": {"$ref": "#/$defs/hash"}}, "additionalProperties": {"$ref": "#/$defs/hash"}},
+    "repositories": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["repository", "root", "bindingId", "head", "branch", "fingerprint", "changedFiles"], "properties": {
+      "repository": {"type": "string", "minLength": 1}, "root": {"type": "string", "minLength": 1}, "bindingId": {"type": ["string", "null"]},
+      "head": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"}, "branch": {"type": "string"}, "fingerprint": {"$ref": "#/$defs/hash"},
+      "changedFiles": {"type": "array", "items": {"type": "string"}}
+    }, "additionalProperties": false}},
+    "route": {"type": "object", "required": ["id", "runId", "version", "definitionHash", "reconstructed"], "properties": {
+      "id": {"type": "string", "minLength": 1}, "runId": {"type": "string", "pattern": "^run-[a-z0-9]{16,64}$"},
+      "version": {"type": "integer", "minimum": 1}, "definitionHash": {"$ref": "#/$defs/hash"},
+      "reconstructed": {"type": "boolean", "description": "迁移自旧任务且没有可核实的 runtime 血缘时为 true"}
+    }, "additionalProperties": false},
+    "approval": {"anyOf": [{"type": "null"}, {"type": "object", "required": ["planHash", "source", "recordedAt"], "properties": {
+      "planHash": {"$ref": "#/$defs/hash"}, "source": {"type": "string", "minLength": 1}, "recordedAt": {"type": "string", "format": "date-time"}
+    }, "additionalProperties": false}]}
+  },
+  "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+  "additionalProperties": false
+}

@@ -16,7 +16,6 @@ import {
   type ExecutionRunResult,
 } from '../contracts/execution.js';
 import { serializeCanonicalJson } from '../core/execution-plan.js';
-import { loadWorkflowPaths } from '../config/workflow-config.js';
 import { errorMessage } from '../types/guards.js';
 import { FakeAgentExecutor } from './fake-executor.js';
 import { FileExecutionJournalStore } from './file-journal.js';
@@ -64,6 +63,7 @@ const readWorkspaceJson = (workspaceRoot: string, requestedPath: string): unknow
 const resolveExecutionsRoot = (
   workspaceRoot: string,
   workflowProjectRoot: string,
+  runtimeRoot: string,
 ): string => {
   const realWorkspace = realpathSync(workspaceRoot);
   const realProject = realpathSync(workflowProjectRoot);
@@ -75,7 +75,6 @@ const resolveExecutionsRoot = (
   ) {
     throw new Error('.agent-workflow 目录越出当前工作区');
   }
-  const runtimeRoot = loadWorkflowPaths().runtimeRoot;
   mkdirSync(runtimeRoot, { recursive: true });
   if (lstatSync(runtimeRoot).isSymbolicLink()) {
     throw new Error('runtime 目录不得是 symlink');
@@ -162,7 +161,10 @@ export const main = async (args = process.argv.slice(2)): Promise<number> => {
       throw new Error('--scheduler 仅支持 serial 或 parallel');
     }
     const { workflowProjectRoot, workspaceRoot } = await import('../config/workspace-paths.js');
-    const executionsRoot = resolveExecutionsRoot(workspaceRoot, workflowProjectRoot);
+    // Workspace configuration is loaded only for real run actions, so help and
+    // argument errors keep working outside a workflow workspace.
+    const { loadWorkflowPaths } = await import('../config/workflow-config.js');
+    const executionsRoot = resolveExecutionsRoot(workspaceRoot, workflowProjectRoot, loadWorkflowPaths().runtimeRoot);
     const runId = parsed.values['run-id'] ??
       `run-${randomBytes(16).toString('hex')}`;
 

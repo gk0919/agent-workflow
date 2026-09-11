@@ -40,6 +40,7 @@ const POLICY_STEPS = Object.freeze([
   step('dist/src/core/fact-extraction-eval.js', ['--check-suite']),
   step('dist/tests/contract/runtime-regression.js'),
   step('dist/tests/contract/task-state-regression.js'),
+  step('dist/tests/contract/handoff-regression.js'),
   step('dist/tests/contract/worktree-state-regression.js'),
   step('dist/src/core/retention-report.js', ['--check']),
   step('dist/src/core/ci-verification.js', ['--all']),

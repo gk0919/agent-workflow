@@ -13,7 +13,7 @@
 5. 业务 Implement 前先展示直接/设计根因或需求不变量、规则责任层、最小完整修改、
    复用/扩展/健壮性影响和验证项并结束回合；仅在用户明确批准后使用 `--user-approved`，
    方案变化必须重新确认。
-6. 已有 Portable 任务首次恢复用 `portable-resume`；进入任务阶段后用 `workflow:next` 续接。
+6. 用户说“交接当前任务”时由 Agent 运行 `agent-workflow task prepare`，说“继续上次任务”时运行 `agent-workflow task continue`；会话已有明确任务 ID 则附 `--task`。命令自动选择任务并加载交接/恢复 Packet，随后由 Agent 完成整理或续接；不要求用户操作文件或命令。进入实际任务阶段后用 `workflow:next` 续接。
 7. 业务写入先区分 `defect` / `requirement` 意图，再按风险判断 `micro-change` / `standard-change`。
 
 长文档是人类维护和深度参考，不是启动提示。工具输出应定向、限量；不得用全仓库日志代替任务证据。

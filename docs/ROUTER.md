@@ -24,10 +24,16 @@
 | 工作流或工具维护 | `workflow-maintenance / inspect` |
 | 纯 Git | `git-only / inspect` |
 | 恢复已有 Portable 任务 | `portable-resume / resume` |
+| 用户要求交接、换会话或切工具 | `task-handoff / prepare` |
 
 Micro Change 数量阈值以 `routes.json` 的 `microChangeGate` 为唯一事实源；目标、验收、唯一落点和验证入口必须明确，且无接口、数据、权限、公共链路、异步生命周期、高风险、迁移、发布协同或外部写入。截图、样式或业务语义有歧义时不得进入。执行中范围扩大时先升级 `standard-change`。
 
 ## Runtime
+
+“我要换会话，帮我交接当前任务”对应 `agent-workflow task prepare`；“继续上次任务”对应 `agent-workflow task continue`。
+这是 Agent 内部入口：自动选择任务、推导 Entry、加载对应 Skill 和摘要。会话或用户明确指定任务时附 `--task`，选定后所有写入和后续命令固定使用该 ID。
+无明确 ID 时按 manifest Last Updated 与有效交接记录的生成时间选择最近未完成任务，不使用文件修改时间；并列时仅询问任务选择。
+找不到本地任务但当前会话有完整任务事实时，按原路由的产物约定建立任务记录，不要求用户填写文件或编造事实；确实缺少目标时才询问。
 
 运行：
 
@@ -51,10 +57,17 @@ Review 同时验证 Brief 文件、仓库和 patch。Windows 优先用 `--micro-
 `diff --output=<file>`，避免 PowerShell 管道；实际超 Gate 或来源绑定失败即升级。
 Micro 和 Standard 进入 Implement 前必须先输出原因/依据、修改点和验证项并结束回合；只有用户
 在当前会话明确批准后才可追加 `--user-approved`。缺少批准或在其他阶段使用该参数均被拒绝。
+持久任务在同一已批准计划上恢复时不必重新展示完整 Implementation Review，但进入 Implement
+和激活工作项仍必须由当前会话用户确认：`advance`、`reopen --to Implement`、`next`、
+`route --stage implement` 与 `task item --status active` 都要求 `--user-approved`；
+任务记录中的批准只用于判断计划与范围是否仍然适用
+（见 [`12-artifacts.md#持久任务persistent`](./12-artifacts.md#持久任务persistent)）。
 Packet 自动生成 Run ID；同 Route 后续阶段复用该 ID，切 Route 时在新 Route 首阶段改用
 `--parent-run-id <old-run>` 创建关联的新 Run。运行日志会校验阶段顺序、Route 归属、Brief
 计划哈希和匿名来源哈希；
 其他 Route 可人工分流，但决策标为 `manual-route-selection`。
+交接是临时操作路由，不改变目标任务的 manifest Route；路由不传 `--task`，随后交接命令传目标任务 ID。
+task-handoff 和 portable-resume 按阶段能力从 Profile 的 `capabilitySkills` 加载 Skill，并计入预算；具体 Skill 定位符不写入 Core。
 加载深度 Reference 时重新运行 Route 并追加 `--reference`；只有当前阶段白名单允许，
 且 Reference 会重新计入上下文预算。长文档使用 `path#heading` 章节选择器，禁止为了读取
 一个规则把整份维护手册加入上下文。

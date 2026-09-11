@@ -21,6 +21,7 @@ import {
   validateVerificationContractFile,
 } from '../core/verification-contract.js';
 import { errorMessage } from '../types/guards.js';
+import { validateHandoffArtifacts } from '../core/task-handoff.js';
 
 interface ArtifactStage {
   name: string;
@@ -47,7 +48,7 @@ const TASK_STATUS_VALUES = new Set(['pending', 'in_progress', 'blocked', 'comple
 const STAGE_STATUS_VALUES = new Set(['pending', 'in_progress', 'blocked', 'complete', 'skipped']);
 const SPEC_STATUS_VALUES = new Set(['draft', 'conditional', 'confirmed']);
 const SPEC_LEVEL_VALUES = new Set(['S', 'M', 'L']);
-const STATE_MODE_VALUES = new Set(['Conversation', 'Portable']);
+const STATE_MODE_VALUES = new Set(['Conversation', 'Portable', 'Persistent']);
 const ENTRY_MODE_VALUES = new Set(taskModel.artifactEntryModes);
 const SOURCE_TYPE_VALUES = new Set(taskModel.sourceTypes);
 const KNOWN_STAGES = new Set(taskModel.knownStages);
@@ -229,19 +230,31 @@ const validateSpec = (
   );
   const contractRequired = !Number.isNaN(createdAtMillis) &&
     createdAtMillis >= contractRequiredAt;
-  if (contractRequired && contractVersion !== '1') {
+  // Version 2 carries executedAgainst. Specs created before the cutover keep the
+  // version they declared; later specs must declare it so baseline recording works.
+  const executionBaselineAt = Date.parse(
+    verificationContractPolicy.executionBaselineRequiredForSpecsCreatedOnOrAfter || '',
+  );
+  const executionBaselineRequired = !Number.isNaN(createdAtMillis) &&
+    !Number.isNaN(executionBaselineAt) && createdAtMillis >= executionBaselineAt;
+  if (contractRequired && !['1', '2'].includes(contractVersion)) {
     errors.push(
-      `${taskId}/spec.md: 新 Spec 必须声明 contract_version: 1`,
+      `${taskId}/spec.md: 新 Spec 必须声明 contract_version: 1 或 2`,
     );
   }
-  if (contractVersion && contractVersion !== '1') {
+  if (executionBaselineRequired && contractVersion !== '2') {
+    errors.push(
+      `${taskId}/spec.md: 在 ${verificationContractPolicy.executionBaselineRequiredForSpecsCreatedOnOrAfter} 之后创建的 Spec 必须声明 contract_version: 2 并记录执行基线（verification.json schemaVersion 2）`,
+    );
+  }
+  if (contractVersion && !['1', '2'].includes(contractVersion)) {
     errors.push(
       `${taskId}/spec.md: contract_version 非法：${contractVersion}`,
     );
   }
-  if (contractVersion === '1' && !hasContract) {
+  if (['1', '2'].includes(contractVersion) && !hasContract) {
     errors.push(
-      `${taskId}: spec.contract_version 为 1 但缺少 verification.json`,
+      `${taskId}: spec.contract_version 已声明但缺少 verification.json`,
     );
   }
   if (!contractVersion && hasContract) {
@@ -249,7 +262,11 @@ const validateSpec = (
       `${taskId}: 存在 verification.json 但 spec.md 未声明 contract_version`,
     );
   }
-  if (contractVersion === '1' && hasContract) {
+  if (['1', '2'].includes(contractVersion) && hasContract) {
+    try {
+      const contract = JSON.parse(readFileSync(contractPath, 'utf8')) as { schemaVersion?: number };
+      if (String(contract.schemaVersion) !== contractVersion) errors.push(`${taskId}: spec contract_version does not match verification schemaVersion`);
+    } catch { errors.push(`${taskId}: invalid verification JSON`); }
     validateVerificationContractFile(
       contractPath,
       { expectedTaskId: taskId },
@@ -454,6 +471,7 @@ const validateTask = (
   if (manifestData.stateMode === 'Portable' && !existsSync(path.join(taskDirectory, 'handoff.md'))) {
     errors.push(`${taskId}: Portable 任务缺少 handoff.md`);
   }
+  errors.push(...validateHandoffArtifacts(taskDirectory, taskId).map((message) => `${taskId}: ${message}`));
   if (!readField(authorization, 'Git Stage')) {
     errors.push(`${taskId}/manifest.md: Authorization 必须使用 Git Stage 字段`);
   }

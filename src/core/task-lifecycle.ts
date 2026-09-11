@@ -22,11 +22,14 @@ export interface ManifestModel {
 }
 
 export type TaskTransitionCommand =
-  'advance' | 'block' | 'complete' | 'resume' | 'skip' | 'start';
+  'advance' | 'block' | 'complete' | 'resume' | 'skip' | 'start' | 'reopen';
 
 export interface TaskTransitionOptions {
   action?: string;
+  approvalSource?: string;
   command: TaskTransitionCommand;
+  /** True when an unchanged recorded approval applies; it never replaces current-session approval. */
+  continuation?: boolean;
   evidence?: string;
   reason?: string;
   stage?: string;
@@ -265,8 +268,8 @@ export const validateManifestTaskFlow = (
   config: RoutesConfig = loadRoutes(),
 ): string[] => {
   const errors: string[] = [];
-  if (model.schemaVersion !== 1) {
-    errors.push('Schema Version 必须为 1');
+  if (![1, 2].includes(model.schemaVersion)) {
+    errors.push('Schema Version 必须为 1 或 2');
   }
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(model.taskId)) {
     errors.push('Task ID 不符合 Schema');
@@ -274,9 +277,10 @@ export const validateManifestTaskFlow = (
   if (!/^run-[a-z0-9]{16,64}$/.test(model.runId)) {
     errors.push('Run ID 不符合 Schema');
   }
-  if (!['Conversation', 'Portable'].includes(model.stateMode)) {
+  if (!['Conversation', 'Portable', ...(model.schemaVersion === 2 ? ['Persistent'] : [])].includes(model.stateMode)) {
     errors.push('State Mode 不符合 Schema');
   }
+  if (model.schemaVersion === 2 && model.stateMode !== 'Persistent') errors.push('Schema Version 2 requires Persistent state mode');
   if (!['pending', 'in_progress', 'blocked', 'complete'].includes(model.status)) {
     errors.push('Status 不符合 Schema');
   }
@@ -424,6 +428,7 @@ export const transitionManifestContent = (
   {
     action = '',
     command,
+    continuation = false,
     evidence = '',
     reason = '',
     stage = '',
@@ -444,10 +449,33 @@ export const transitionManifestContent = (
   const flow = taskFlowFor(model.routeId, config);
   const stageByName = new Map(model.stages.map((item) => [item.name, item]));
   const current = stageByName.get(model.currentStage);
-  if (userApproved && command !== 'advance') {
+  if (userApproved && !['advance', 'reopen'].includes(command)) {
     throw new Error(
       'Implementation Approval Gate: --user-approved 只允许用于转入 Implement',
     );
+  }
+
+  if (command === 'reopen') {
+    if (model.schemaVersion !== 2 || model.routeId !== 'standard-change' ||
+        !['Review', 'Verify', 'Git Inspect'].includes(model.currentStage) ||
+        !['in_progress', 'blocked'].includes(model.status)) throw new Error('reopen 只支持持久标准任务的 Review/Verify/Git Inspect');
+    const targetStage = cleanInline(to, 'Reopen stage');
+    if (!['Spec', 'Plan', 'Implement', 'Review', 'Verify'].includes(targetStage) ||
+        flow.stages.indexOf(targetStage) >= flow.stages.indexOf(model.currentStage)) throw new Error('reopen 必须回到更早的方案、实施或验证阶段');
+    if (targetStage === 'Implement' && !userApproved) throw new Error(
+      continuation
+        ? 'Implementation Approval Gate: 批准记录与当前计划一致，但仍需当前会话用户确认继续；确认后追加 --user-approved'
+        : 'reopen Implement 需要当前会话用户确认继续实施；确认后追加 --user-approved',
+    );
+    const safeReason = cleanInline(reason, 'Reopen reason');
+    const safeAction = cleanInline(action, 'Next Action');
+    let content = originalContent;
+    for (const item of model.stages.slice(flow.stages.indexOf(targetStage))) {
+      content = replaceStage(content, item.name, item.name === targetStage ? 'in_progress' : 'pending', `Reopened: ${safeReason}`);
+    }
+    content = updateIdentity(content, 'in_progress', targetStage, updatedAt);
+    content = updateResume(content, { blockers: 'none', lastCompletedStage: lastCompleted(model.stages.slice(0, flow.stages.indexOf(targetStage))), nextAction: safeAction, nextPendingStage: targetStage });
+    return content;
   }
 
   if (command === 'start') {
@@ -531,8 +559,11 @@ export const transitionManifestContent = (
     }
     if (targetStage === 'Implement' && !userApproved) {
       throw new Error(
-        'Implementation Approval Gate: Plan 转入 Implement 前必须获得用户明确批准；' +
-        '批准后使用 --user-approved',
+        continuation
+          ? 'Implementation Approval Gate: 批准记录与当前计划一致，但仍需当前会话用户确认继续；' +
+            '确认后追加 --user-approved'
+          : 'Implementation Approval Gate: Plan 转入 Implement 前必须获得用户明确批准；' +
+            '批准后使用 --user-approved',
       );
     }
     const target = stageByName.get(targetStage);
