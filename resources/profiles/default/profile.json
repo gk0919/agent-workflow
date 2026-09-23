@@ -5,24 +5,28 @@
   "description": "供尚未配置项目专属工作流 Profile 的仓库使用的可移植默认值。",
   "taskModel": {
     "intentRoutes": {
-      "analysis": ["analysis", "capture"],
+      "analysis": ["task-analysis", "capture"],
+      "architecture": ["level-4", "capture"],
       "change": null,
+      "cosmetic": null,
       "defect": null,
-      "git-only": ["git-only", "inspect"],
-      "pool-capture": ["pool-capture", "capture"],
-      "portable-resume": ["portable-resume", "resume"],
+      "git-only": ["task-git", "inspect"],
+      "pool-capture": ["task-pool-capture", "capture"],
+      "portable-resume": ["task-portable-resume", "resume"],
       "requirement": null,
-      "review": ["review-only", "capture"],
-      "workflow-maintenance": ["workflow-maintenance", "inspect"]
+      "review": ["task-review", "capture"],
+      "workflow-maintenance": ["task-workflow-maintenance", "inspect"]
     },
-    "changeIntents": ["change", "defect", "requirement"],
-    "changeTypes": ["defect", "requirement"],
+    "changeIntents": ["change", "cosmetic", "defect", "requirement"],
+    "changeTypes": ["cosmetic", "defect", "requirement"],
     "changeTypeByIntent": {
+      "cosmetic": "cosmetic",
       "defect": "defect",
       "requirement": "requirement"
     },
     "evolutionaryChangeTypes": ["requirement"],
-    "microStages": {
+    "changeStages": {
+      "cosmetic": "locate-cosmetic",
       "defect": "locate-defect",
       "requirement": "locate-requirement"
     },
@@ -33,7 +37,7 @@
       "workflow-maintenance": ["not-applicable"]
     },
     "artifactEntryModes": ["direct", "pool"],
-    "sourceTypes": ["defect", "requirement"],
+    "sourceTypes": ["architecture", "defect", "requirement"],
     "providerEntryMode": "pool",
     "sourceCaptureStage": "Source Capture",
     "intakeStage": "Intake",
@@ -44,7 +48,11 @@
       "Analyze",
       "PRD",
       "Spec",
+      "Design Review",
+      "Architecture Review",
+      "Milestones",
       "Plan",
+      "Multi-Repo Sync",
       "Implement",
       "Review",
       "Verify",

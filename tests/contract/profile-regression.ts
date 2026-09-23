@@ -45,7 +45,7 @@ export const main = (): number => {
       incompleteStageProfile.taskModel.knownStages.filter((stage) => stage !== 'Inspect');
     assert.deepEqual(
       validateProfileTaskStages(incompleteStageProfile, loadRoutes()),
-      ['workflow-maintenance.taskFlow 使用 Profile 未登记阶段：Inspect'],
+      ['task-workflow-maintenance.taskFlow 使用 Profile 未登记阶段：Inspect'],
     );
     const unknownProviderProfile = structuredClone(defaultProfile);
     unknownProviderProfile.taskModel.providerEntryMode = 'ghost-provider';
@@ -60,17 +60,17 @@ export const main = (): number => {
     assert.ok(validateProfileTaskStages(unknownRouteProfile, loadRoutes())
       .some((message) => message.includes('未知 Route：ghost-route')));
     const unknownRouteStageProfile = structuredClone(defaultProfile);
-    unknownRouteStageProfile.taskModel.intentRoutes.review = ['review-only', 'ghost-stage'];
+    unknownRouteStageProfile.taskModel.intentRoutes.review = ['task-review', 'ghost-stage'];
     assert.ok(validateProfileTaskStages(unknownRouteStageProfile, loadRoutes())
-      .some((message) => message.includes('未知 Stage：review-only/ghost-stage')));
+      .some((message) => message.includes('未知 Stage：task-review/ghost-stage')));
     const mismatchedEntryProfile = structuredClone(defaultProfile);
     mismatchedEntryProfile.taskModel.expectedIntentEntries['workflow-maintenance'] = ['pool'];
     assert.ok(validateProfileTaskStages(mismatchedEntryProfile, loadRoutes())
-      .some((message) => message.includes('入口 pool 未被 Route workflow-maintenance 接受')));
+      .some((message) => message.includes('入口 pool 未被 Route task-workflow-maintenance 接受')));
     const unknownMicroStageProfile = structuredClone(defaultProfile);
-    unknownMicroStageProfile.taskModel.microStages.defect = 'ghost-stage';
+    unknownMicroStageProfile.taskModel.changeStages.defect = 'ghost-stage';
     assert.ok(validateProfileTaskStages(unknownMicroStageProfile, loadRoutes())
-      .some((message) => message.includes('micro-change/ghost-stage')));
+      .some((message) => message.includes('level-1/ghost-stage')));
     assert.throws(
       () => loadWorkflowProfile('workflow:tests/fixtures/profiles/cycle-a.json'),
       /extends 存在循环/,
@@ -122,7 +122,7 @@ export const main = (): number => {
       evolutionary: 'evolutionary',
     };
     portableProfile.taskModel.evolutionaryChangeTypes = ['evolutionary'];
-    portableProfile.taskModel.microStages = {
+    portableProfile.taskModel.changeStages = {
       defect: 'locate-defect',
       evolutionary: 'locate-requirement',
     };
@@ -143,7 +143,7 @@ export const main = (): number => {
       usesExistingPattern: true,
     }, loadRoutes(), portableProfile);
     assert.equal(classification.changeType, 'evolutionary');
-    assert.equal(classification.route, 'micro-change');
+    assert.equal(classification.route, 'level-1');
     assert.equal(classification.stage, 'locate-requirement');
 
     const previousOverride = process.env.AI_WORKFLOW_PROFILE;
@@ -151,7 +151,7 @@ export const main = (): number => {
       process.env.AI_WORKFLOW_PROFILE = 'workflow:resources/profiles/default/profile.json';
       const packet = buildRoutePacket({
         entry: 'direct',
-        route: 'analysis',
+        route: 'task-analysis',
         stage: 'capture',
       });
       assert.equal(packet.profile.id, 'default');

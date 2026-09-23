@@ -14,6 +14,7 @@ import {
   transitionManifestContent,
   validateManifestTaskFlow,
 } from '../../src/core/task-lifecycle.js';
+import { loadRoutes } from '../../src/core/context-budget.js';
 import type {
   TaskTransitionCommand,
   TaskTransitionOptions,
@@ -36,7 +37,7 @@ const fixture = `# Task Manifest
 - Mode: Pair
 - State Mode: Portable
 - Route: Standard
-- Route ID: standard-change
+- Route ID: level-2
 - Status: pending
 - Current Stage: Source Capture
 - Last Executor: Test
@@ -209,6 +210,17 @@ export const main = (): number => {
           () => transition(content, 'advance', { action, evidence, to }),
           /Implementation Approval Gate/,
         );
+        // The gate is a Route declaration rather than a Route name: clearing the
+        // declaration removes the confirmation requirement for the same task state.
+        const withoutImplementationGate = structuredClone(loadRoutes());
+        withoutImplementationGate.routes['level-2']!.implementationApprovalRequired = false;
+        assert.doesNotThrow(() => transitionManifestContent(content, {
+          action,
+          command: 'advance',
+          evidence,
+          to,
+          updatedAt: '2026-07-26T01:00:00.000Z',
+        }, withoutImplementationGate));
       }
       content = transition(content, 'advance', {
         action,

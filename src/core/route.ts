@@ -51,11 +51,12 @@ export interface RouteOptions {
   classificationFacts: Partial<RouteFacts> | null;
   entry: string;
   format: 'json' | 'text';
+  level: number | null;
   list: boolean;
   materializeContext: boolean;
-  microBriefFile: string;
-  microPatchFile: string;
-  microPatchStdin: boolean;
+  briefFile: string;
+  patchFile: string;
+  patchStdin: boolean;
   noLog: boolean;
   parentRunId: string;
   references: string[];
@@ -91,9 +92,9 @@ interface MicroScope {
 }
 
 interface MicroScopeOptions {
-  microBriefFile?: string;
-  microPatchFile?: string;
-  microPatchStdin?: boolean;
+  briefFile?: string;
+  patchFile?: string;
+  patchStdin?: boolean;
   repository?: string;
   route: string;
   runId: string;
@@ -114,8 +115,8 @@ const usage = [
   '    [--skill <name>] [--reference <path#heading>] [--risk <flag>]',
   '    [--format text|json]',
   '    [--run-id <anonymous-id>] [--parent-run-id <anonymous-id>] [--task <task-id>]',
-  '    [--micro-brief-file <workspace-relative-json>]',
-  '    [--micro-patch-stdin | --micro-patch-file <workspace-relative-patch>]',
+  '    [--brief-file <workspace-relative-json>]',
+  '    [--patch-stdin | --patch-file <workspace-relative-patch>]',
   '    [--repository <workspace-relative-repository>]',
   '    [--user-approved]',
   '    [--materialize-context] [--no-log]',
@@ -128,11 +129,12 @@ export const readArguments = (args: string[]): RouteOptions => {
     classificationFacts: null,
     entry: '',
     format: 'text',
+    level: null,
     list: false,
     materializeContext: false,
-    microBriefFile: '',
-    microPatchFile: '',
-    microPatchStdin: false,
+    briefFile: '',
+    patchFile: '',
+    patchStdin: false,
     noLog: false,
     parentRunId: '',
     references: [],
@@ -163,8 +165,17 @@ export const readArguments = (args: string[]): RouteOptions => {
       options.noLog = true;
       continue;
     }
-    if (argument === '--micro-patch-stdin') {
-      options.microPatchStdin = true;
+    if (argument === '--level') {
+      const value = Number(args[index + 1]);
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error('--level 必须提供非负整数');
+      }
+      options.level = value;
+      index += 1;
+      continue;
+    }
+    if (argument === '--patch-stdin') {
+      options.patchStdin = true;
       continue;
     }
     if (argument === '--user-approved') {
@@ -180,8 +191,8 @@ export const readArguments = (args: string[]): RouteOptions => {
       '--reference',
       '--repository',
       '--format',
-      '--micro-brief-file',
-      '--micro-patch-file',
+      '--brief-file',
+      '--patch-file',
       '--parent-run-id',
       '--run-id',
       '--task',
@@ -200,10 +211,10 @@ export const readArguments = (args: string[]): RouteOptions => {
         options.runId = value;
       } else if (argument === '--parent-run-id') {
         options.parentRunId = value;
-      } else if (argument === '--micro-brief-file') {
-        options.microBriefFile = value;
-      } else if (argument === '--micro-patch-file') {
-        options.microPatchFile = value;
+      } else if (argument === '--brief-file') {
+        options.briefFile = value;
+      } else if (argument === '--patch-file') {
+        options.patchFile = value;
       } else if (argument === '--task') {
         options.taskId = value;
       } else {
@@ -234,6 +245,10 @@ export const readRouteArguments = (args: string[]): RouteOptions => {
     options.classificationFacts = facts;
     options.entry = facts.entry || '';
     options.riskFlags = facts.riskFlags ?? [];
+    // `--level` is consumed as a fact, so mirror it onto the options the gate reads.
+    if (typeof facts.level === 'number') {
+      options.level = facts.level;
+    }
   } else {
     options.classificationFacts = null;
   }
@@ -244,9 +259,9 @@ const classifyRouteSelection = (
   options: RouteOptions,
 ): RouteClassification | null => {
   if (!options.classificationFacts) {
-    if (options.route === 'micro-change') {
+    if (loadRoutes().routes[options.route]?.factClassificationRequired) {
       throw new Error(
-        'Micro Change 必须在 workflow:route 中提供 --intent 和全部 Gate 事实',
+        'level-1 必须在 workflow:route 中提供 --intent 和全部 Gate 事实',
       );
     }
     return null;
@@ -267,10 +282,10 @@ export const guardMicroChangeScope = (
   allowNewRun: boolean,
   events: WorkflowEvent[],
 ): MicroScope => {
-  if (options.route !== 'micro-change') {
-    if (options.microBriefFile || options.microPatchFile ||
-        options.microPatchStdin || options.repository) {
-      throw new Error('当前 Route/Stage 不接受 Micro Change Brief 或 patch 参数');
+  if (!loadRoutes().routes[options.route]?.stagePaths) {
+    if (options.briefFile || options.patchFile ||
+        options.patchStdin || options.repository) {
+      throw new Error('当前 Route/Stage 不接受 Brief 或 patch 参数');
     }
     return {
       microBrief: null,
@@ -283,41 +298,41 @@ export const guardMicroChangeScope = (
   const repositoryGuard = guardMicroRepository(options.repository ?? '', {
     required: false,
   });
-  const patchInputCount = Number(options.microPatchStdin) +
-    Number(Boolean(options.microPatchFile));
+  const patchInputCount = Number(options.patchStdin) +
+    Number(Boolean(options.patchFile));
   if (!requiresGuard) {
     if (patchInputCount > 0) {
-      throw new Error('当前 Route/Stage 不接受 Micro Change 实际 patch 参数');
+      throw new Error('当前 Route/Stage 不接受 level-1 实际 patch 参数');
     }
   } else if (patchInputCount !== 1) {
     throw new Error(
       `${options.route}/${options.stage} 必须且只能使用 ` +
-      '--micro-patch-stdin 或 --micro-patch-file 提交任务 patch',
+      '--patch-stdin 或 --patch-file 提交任务 patch',
     );
   }
   if (requiresGuard && !repositoryGuard) {
     throw new Error(
-      `Micro Change 实际范围检查：${options.route}/${options.stage} ` +
+      `Change 范围检查：${options.route}/${options.stage} ` +
       '必须使用 --repository ' +
       '绑定实际 patch 所属仓库',
     );
   }
-  if (!requiresBrief && options.microBriefFile) {
-    throw new Error('当前 Route/Stage 不接受 --micro-brief-file');
+  if (!requiresBrief && options.briefFile) {
+    throw new Error('当前 Route/Stage 不接受 --brief-file');
   }
-  if (requiresBrief && !options.microBriefFile) {
+  if (requiresBrief && !options.briefFile) {
     throw new Error(
-      `${options.route}/${options.stage} 必须使用 --micro-brief-file ` +
+      `${options.route}/${options.stage} 必须使用 --brief-file ` +
       '提交 G/AC/OOS/C/VT 追踪契约',
     );
   }
   if (!classification) {
-    throw new Error('Micro Change 缺少结构化事实分类');
+    throw new Error('level-1 缺少结构化事实分类');
   }
-  const patch = options.microPatchStdin
+  const patch = options.patchStdin
     ? readFileSync(0, 'utf8')
-    : options.microPatchFile
-      ? readWorkflowInputFile(options.microPatchFile, {
+    : options.patchFile
+      ? readWorkflowInputFile(options.patchFile, {
         allowedPrefix: `${workflowRelativePath('runtimeRoot', 'patches')}/`,
         label: 'Micro patch 文件',
         maxBytes: 200 * 1024,
@@ -331,7 +346,7 @@ export const guardMicroChangeScope = (
     : null;
   const microBrief = requiresBrief
     ? guardMicroBriefFile({
-      briefFile: options.microBriefFile ?? '',
+      briefFile: options.briefFile ?? '',
       patchFiles: microGuard?.files || [],
       repository: repositoryGuard?.repository || '',
       stage: options.stage,
@@ -344,6 +359,7 @@ export const guardMicroChangeScope = (
     events,
     patchHash: microGuard?.patchHash ?? '',
     repositoryId: microGuard?.repositoryId ?? '',
+    route: options.route,
     runId: options.runId,
     sourceHash: microGuard?.sourceHash ?? '',
     stage: options.stage,
@@ -378,7 +394,7 @@ export const validateImplementationApproval = ({
   userApproved = false,
 }: { continuation?: boolean; route: string; stage: string; userApproved?: boolean }): void => {
   const requiresApproval = stage === 'implement' &&
-    ['micro-change', 'standard-change'].includes(route);
+    loadRoutes().routes[route]?.implementationApprovalRequired === true;
   if (requiresApproval && !userApproved) {
     throw new Error(
       continuation
@@ -392,7 +408,34 @@ export const validateImplementationApproval = ({
   if (!requiresApproval && userApproved) {
     throw new Error(
       'Implementation Approval Gate: --user-approved 只允许用于 ' +
-      'micro-change 或 standard-change 的 implement 阶段',
+      'level-1 或 level-2 的 implement 阶段',
+    );
+  }
+};
+
+/**
+ * Grades are declared, not inferred: only a Route that declares `requiredLevel`
+ * accepts `--level`, and it accepts exactly that value. Fact consistency between
+ * the declared grade and the derived grade is enforced during classification.
+ */
+export const guardLevelDeclaration = (
+  options: Pick<RouteOptions, 'level' | 'route'>,
+): void => {
+  const requiredLevel = loadRoutes().routes[options.route]?.requiredLevel;
+  if (options.level === null) {
+    if (requiredLevel !== undefined) {
+      throw new Error(
+        `等级声明 Gate: Route ${options.route} 必须显式声明 --level ${requiredLevel}；` +
+        '缺少声明的调用一律拒绝',
+      );
+    }
+    return;
+  }
+  if (requiredLevel !== options.level) {
+    throw new Error(
+      `等级声明 Gate: --level ${options.level} 只允许用于声明 ` +
+      `requiredLevel ${options.level} 的 Route；当前 Route ${options.route} ` +
+      (requiredLevel === undefined ? '未声明等级门禁' : `要求 --level ${requiredLevel}`),
     );
   }
 };
@@ -480,7 +523,7 @@ const recordSafely = (
 ): void => {
   if (disabled) {
     if (required) {
-      throw new Error('Micro Change Run Gate: Micro 路由不允许使用 --no-log');
+      throw new Error('Change Run Gate: 等级路由不允许使用 --no-log');
     }
     return;
   }
@@ -489,7 +532,7 @@ const recordSafely = (
   } catch (error: unknown) {
     if (required) {
       throw new Error(
-        `Micro Change Run Gate: 无法写入连续性日志（${errorMessage(error)}）`,
+        `Change Run Gate: 无法写入连续性日志（${errorMessage(error)}）`,
       );
     }
     process.stderr.write('WARN: 匿名化路由日志写入失败，路由结果不受影响。\n');
@@ -558,12 +601,13 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
     classificationFacts: null,
     entry: attemptedValue(args, '--entry'),
     format: 'text',
+    level: null,
     list: args.includes('--list'),
     materializeContext:
       args.includes('--materialize-context') || args.includes('--materialize'),
-    microBriefFile: attemptedValue(args, '--micro-brief-file'),
-    microPatchFile: attemptedValue(args, '--micro-patch-file'),
-    microPatchStdin: args.includes('--micro-patch-stdin'),
+    briefFile: attemptedValue(args, '--brief-file'),
+    patchFile: attemptedValue(args, '--patch-file'),
+    patchStdin: args.includes('--patch-stdin'),
     noLog: args.includes('--no-log'),
     parentRunId: attemptedValue(args, '--parent-run-id'),
     references: [],
@@ -598,8 +642,8 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
       listRoutes();
       return 0;
     }
-    if (!options.route || !options.stage || !options.entry) {
-      throw new Error('必须提供 --route、--stage 和 --entry');
+    if ((!options.route && options.level === null) || !options.stage || !options.entry) {
+      throw new Error('必须提供 --route（或用 --level 选择等级 Route）、--stage 和 --entry');
     }
     if (!['text', 'json'].includes(options.format)) {
       throw new Error('--format 只支持 text 或 json');
@@ -614,7 +658,15 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
       throw new Error('--run-id 与 --parent-run-id 不能同时使用');
     }
 
+    if (!options.route) {
+      if (options.level === null) throw new Error('必须提供 --route 或 --level');
+      const matched = Object.entries(loadRoutes().routes)
+        .find(([, route]) => route.requiredLevel === options.level);
+      if (!matched) throw new Error(`没有声明 requiredLevel ${options.level} 的 Route`);
+      options.route = matched[0];
+    }
     classification = classifyRouteSelection(options);
+    guardLevelDeclaration(options);
     const published = options.taskId ? requirePublishedTask(taskPath(options.taskId), true) : null;
     const continuation = Boolean(published && options.stage === 'implement' &&
       hasTaskApproval(taskPath(options.taskId), published));
@@ -695,7 +747,9 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
       timestamp: new Date().toISOString(),
       requestedOutputChars: rendered.requestedOutputChars,
       usedChars: packet.usedChars,
-    }, options.noLog, { required: packet.route === 'micro-change' });
+    }, options.noLog, {
+      required: loadRoutes().routes[packet.route]?.patchLogRequired === true,
+    });
     process.stdout.write(`${output}\n`);
     if (rendered.warning) {
       process.stderr.write(`WARN: ${rendered.warning}。\n`);

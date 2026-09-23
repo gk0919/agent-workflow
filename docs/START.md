@@ -4,7 +4,7 @@
 
 1. 读取根目录 `AGENTS.md`、本文件和 [`ROUTER.md`](./ROUTER.md)；不要预读 `README.md`、完整阶段手册、项目策略或 Reference。
 2. 按 Router 选择最小路由，优先运行
-   `npm run workflow:route -- --route <route> --stage <stage> --entry <entry> --materialize`；
+   `npm run workflow:route -- --level <0-4> --stage <stage> --entry <entry> --intent <intent> --materialize`；
    超限时自动完整物化优先文档并列出剩余项；首份仍超限才按白名单读取。
 3. 只读取 Route Packet 的 `Instruction Docs`、当前任务事实和命中 Skill；其他工作流文档不在允许集合内。
 4. 阶段变化时重生成 Packet；同 Route 复用 Run ID，切 Route 创建新 Run 并用
@@ -14,7 +14,8 @@
    复用/扩展/健壮性影响和验证项并结束回合；仅在用户明确批准后使用 `--user-approved`，
    方案变化必须重新确认。
 6. 用户说“交接当前任务”时由 Agent 运行 `agent-workflow task prepare`，说“继续上次任务”时运行 `agent-workflow task continue`；会话已有明确任务 ID 则附 `--task`。命令自动选择任务并加载交接/恢复 Packet，随后由 Agent 完成整理或续接；不要求用户操作文件或命令。进入实际任务阶段后用 `workflow:next` 续接。
-7. 业务写入先区分 `defect` / `requirement` 意图，再按风险判断 `micro-change` / `standard-change`。
+7. 业务写入先区分 `defect` / `requirement` 意图，再用 `--level <0-4>` 选中对应 `level-N`
+   （`--route` 可选且同时给出必须一致）；等级由事实校验，声明低于事实推导等级会被拒绝。
 
 长文档是人类维护和深度参考，不是启动提示。工具输出应定向、限量；不得用全仓库日志代替任务证据。
 路由只记录匿名化运行指标，不记录用户原文、业务正文、文件内容或凭据。

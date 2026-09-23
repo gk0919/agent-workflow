@@ -66,7 +66,7 @@ Source Snapshot、Intake、按需 PRD、项目地图和相关代码。
 ## 自动落盘
 
 正式 Spec 按 [`12-artifacts.md`](./12-artifacts.md) 保存最小包及 `verification.json`。
-Micro Change 不触发落盘；升级进入 Spec 后开始遵守。只保存实际生成的可用产物。
+level-1 不触发落盘；升级进入 Spec 后开始遵守。只保存实际生成的可用产物。
 
 `spec.md` 顶部使用：
 

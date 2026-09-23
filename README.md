@@ -112,12 +112,12 @@ GitHub Packages 的 npm 登录使用 GitHub Personal Access Token，不使用账
 
 ## Micro Change
 
-Micro Change 是独立风险路由，不是把标准流程的每个阶段各写短一点。运行时通用门禁见 [`cards/micro-change.md`](./resources/cards/micro-change.md)，意图差异见 `intent-defect.md` / `intent-requirement.md`；[`micro-change.md`](./docs/micro-change.md) 只作为深度参考。
+Micro Change 是独立风险路由，不是把标准流程的每个阶段各写短一点。运行时通用门禁见 [`cards/level-1.md`](./resources/cards/level-1.md)，意图差异见 `intent-defect.md` / `intent-requirement.md`；[`level-1.md`](./docs/level-1.md) 只作为深度参考。
 
 - Source Capture 仍是业务任务的强制入口。
 - 缺陷使用 Defect Brief，记录现象、根因证据、范围、回归点和验收结果。
 - 小型需求使用 Requirement Brief，记录用户场景、行为差异、范围、兼容策略和验收标准。
-- Brief 按 [`verification-contract.md#micro-change`](./docs/verification-contract.md#micro-change)
+- Brief 按 [`verification-contract.md#level-1`](./docs/verification-contract.md#level-1)
   保存目标、计划/实际文件、测试点、执行主体和验证缺口。
 - Micro Change 不生成正式 Spec，因此不触发最小 Spec 包落盘。
 - Review 和 Verify 不得跳过，但只针对本任务拥有的语义 patch。
@@ -232,15 +232,18 @@ Codex、Qoder 和支持 `AGENTS.md` 的 TRAE 版本直接复用根目录入口�
 <!-- ai-workflow:routes:start -->
 | Route | Entry | Runtime Stages |
 |---|---|---|
-| `pool-capture` | `pool` | `capture` → `report` |
-| `micro-change` | `direct`, `pool` | `defect`: `locate-defect` → `implement` → `review-defect` → `verify-defect` → `git-inspect`<br>`requirement`: `locate-requirement` → `implement` → `review-requirement` → `verify-requirement` → `git-inspect` |
-| `standard-change` | `direct`, `pool` | `capture` → `intake` → `prd` → `spec-plan` → `implement` → `review` → `verify` → `git-inspect` |
-| `analysis` | `direct`, `pool` | `capture` → `analyze` |
-| `review-only` | `direct`, `pool` | `capture` → `review` → `verify` |
-| `workflow-maintenance` | `not-applicable` | `inspect` → `implement` → `review` → `verify` → `git-inspect` |
-| `git-only` | `not-applicable` | `inspect` → `action` → `report` |
+| `task-pool-capture` | `pool` | `capture` → `report` |
+| `level-1` | `direct`, `pool` | `defect`: `locate-defect` → `implement` → `review-defect` → `verify-defect` → `git-inspect`<br>`requirement`: `locate-requirement` → `implement` → `review-requirement` → `verify-requirement` → `git-inspect` |
+| `level-0` | `direct` | `cosmetic`: `locate-cosmetic` → `implement` → `review-cosmetic` → `verify-cosmetic` → `git-inspect` |
+| `level-2` | `direct`, `pool` | `capture` → `intake` → `prd` → `spec-plan` → `implement` → `review` → `verify` → `git-inspect` |
+| `level-3` | `direct`, `pool` | `capture` → `intake` → `prd` → `spec-plan` → `design-review` → `plan` → `implement` → `review` → `verify` → `git-inspect` |
+| `level-4` | `direct`, `pool` | `capture` → `prd` → `architecture-review` → `multi-repo-sync` → `implement` → `review` → `verify` → `git-inspect` |
+| `task-analysis` | `direct`, `pool` | `capture` → `analyze` |
+| `task-review` | `direct`, `pool` | `capture` → `review` → `verify` |
+| `task-workflow-maintenance` | `not-applicable` | `inspect` → `implement` → `review` → `verify` → `git-inspect` |
+| `task-git` | `not-applicable` | `inspect` → `action` → `report` |
 | `task-handoff` | `direct`, `pool`, `not-applicable` | `prepare` |
-| `portable-resume` | `direct`, `pool`, `not-applicable` | `resume` |
+| `task-portable-resume` | `direct`, `pool`, `not-applicable` | `resume` |
 <!-- ai-workflow:routes:end -->
 
 ## 运行反馈与经验晋升

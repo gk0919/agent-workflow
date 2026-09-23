@@ -76,8 +76,10 @@ interface MicroPatchGuard extends MicroPatchAnalysis {
 }
 
 export const MICRO_GUARD_STAGES = new Set([
+  'review-cosmetic',
   'review-defect',
   'review-requirement',
+  'verify-cosmetic',
   'verify-defect',
   'verify-requirement',
   'git-inspect',
@@ -113,7 +115,7 @@ const withTemporaryPatchFile = <T>(
 ): T => {
   const patchRoot = resolveWorkspaceRelativePath(
     workflowRelativePath('runtimeRoot', 'patches'),
-    'Micro Change Source Gate 临时目录',
+    'level-1 Source Gate 临时目录',
   );
   mkdirSync(patchRoot, { recursive: true });
   // A unique owned directory avoids Windows stdin pipe stalls and cleanup collisions.
@@ -141,12 +143,12 @@ const throwGitExecutionError = (
       : '';
   if (code === 'ETIMEDOUT') {
     throw new Error(
-      `Micro Change Source Gate: Git ${operation}执行超时${detail}；` +
+      `level-1 Source Gate: Git ${operation}执行超时${detail}；` +
       '请重试，持续发生时检查 Git 与本机进程环境',
     );
   }
   throw new Error(
-    `Micro Change Source Gate: 无法执行 Git ${operation}${detail}；` +
+    `level-1 Source Gate: 无法执行 Git ${operation}${detail}；` +
     '请检查 Git 安装与本机进程环境',
   );
 };
@@ -168,7 +170,7 @@ export const guardMicroRepository = (
     if (!required) {
       return null;
     }
-    throw new Error('Micro Change 实际范围检查必须提供 --repository');
+    throw new Error('Change 范围检查必须提供 --repository');
   }
   if (path.isAbsolute(repository)) {
     throw new Error('--repository 必须使用工作区相对路径');
@@ -227,7 +229,7 @@ const decodeGitQuotedPath = (value: string): string => {
     if (/^[0-7]{3}$/.test(octal)) {
       const byte = Number.parseInt(octal, 8);
       if (byte > 0xff) {
-        throw new Error('Micro Change patch 包含非法 Git 路径转义');
+        throw new Error('level-1 patch 包含非法 Git 路径转义');
       }
       chunks.push(Buffer.from([byte]));
       index += 4;
@@ -236,7 +238,7 @@ const decodeGitQuotedPath = (value: string): string => {
     const escaped = value[index + 1] ?? '';
     const byte = GIT_QUOTED_ESCAPES[escaped];
     if (byte === undefined) {
-      throw new Error('Micro Change patch 包含非法 Git 路径转义');
+      throw new Error('level-1 patch 包含非法 Git 路径转义');
     }
     chunks.push(Buffer.from([byte]));
     index += 2;
@@ -244,7 +246,7 @@ const decodeGitQuotedPath = (value: string): string => {
   flushLiteral();
   const decoded = Buffer.concat(chunks).toString('utf8');
   if (decoded.includes('\uFFFD')) {
-    throw new Error('Micro Change patch 的 Git 路径不是有效 UTF-8');
+    throw new Error('level-1 patch 的 Git 路径不是有效 UTF-8');
   }
   return decoded;
 };
@@ -263,36 +265,36 @@ const normalizePatchPath = (
     : trimmed;
   if (!normalized.startsWith(expectedPrefix)) {
     throw new Error(
-      `Micro Change patch 文件路径必须以 ${expectedPrefix} 开头`,
+      `level-1 patch 文件路径必须以 ${expectedPrefix} 开头`,
     );
   }
   const relativePath = normalized.slice(expectedPrefix.length);
   if (!relativePath || relativePath.includes('\\') ||
       /[\x00-\x1f\x7f]/.test(relativePath) ||
       relativePath.split('/').some((part) => part === '.' || part === '..')) {
-    throw new Error('Micro Change patch 包含非法或越界文件路径');
+    throw new Error('level-1 patch 包含非法或越界文件路径');
   }
   return normalized;
 };
 
 export const analyzeMicroChangePatch = (
   patch: unknown,
-  gate: RoutesConfig['microChangeGate'] = loadRoutes().microChangeGate,
+  gate: RoutesConfig['changeGate'] = loadRoutes().changeGate,
 ): MicroPatchAnalysis => {
   if (typeof patch !== 'string' || !patch.trim()) {
-    throw new Error('Micro Change 实际范围检查未收到 unified diff');
+    throw new Error('Change 范围检查未收到 unified diff');
   }
   if (Buffer.byteLength(patch, 'utf8') > MAX_PATCH_BYTES) {
-    throw new Error(`Micro Change patch 超过 ${MAX_PATCH_BYTES} 字节上限`);
+    throw new Error(`level-1 patch 超过 ${MAX_PATCH_BYTES} 字节上限`);
   }
   if (patch.includes('\0') || patch.includes('\uFFFD')) {
-    throw new Error('Micro Change patch 必须是有效 UTF-8 文本');
+    throw new Error('level-1 patch 必须是有效 UTF-8 文本');
   }
   if (/^(?:GIT binary patch|Binary files .* differ)$/m.test(patch)) {
-    throw new Error('Micro Change 不接受二进制补丁');
+    throw new Error('level-1 不接受二进制补丁');
   }
   if (/^[+-]Subproject commit [0-9a-f]+/m.test(patch)) {
-    throw new Error('Micro Change 不接受子仓库指针变更');
+    throw new Error('level-1 不接受子仓库指针变更');
   }
 
   const unifiedFiles = new Set<string>();
@@ -307,14 +309,14 @@ export const analyzeMicroChangePatch = (
       return;
     }
     if (!currentFile.oldPathSeen || !currentFile.newPathSeen) {
-      throw new Error('Micro Change patch 的文件头不完整');
+      throw new Error('level-1 patch 的文件头不完整');
     }
     const selectedPath = currentFile.newPath ?? currentFile.oldPath;
     if (!selectedPath) {
-      throw new Error('Micro Change patch 的新旧文件路径不能同时为 /dev/null');
+      throw new Error('level-1 patch 的新旧文件路径不能同时为 /dev/null');
     }
     if (unifiedFiles.has(selectedPath)) {
-      throw new Error(`Micro Change patch 重复声明文件：${selectedPath}`);
+      throw new Error(`level-1 patch 重复声明文件：${selectedPath}`);
     }
     unifiedFiles.add(selectedPath);
   };
@@ -322,11 +324,11 @@ export const analyzeMicroChangePatch = (
   patch.split(/\r?\n/).forEach((line) => {
     if (line.startsWith('diff --git ')) {
       if (inHunk) {
-        throw new Error('Micro Change patch 的 hunk 行数与内容不一致');
+        throw new Error('level-1 patch 的 hunk 行数与内容不一致');
       }
       completeCurrentFile();
       if (!line.slice('diff --git '.length).trim()) {
-        throw new Error('Micro Change patch 的 diff --git 文件头为空');
+        throw new Error('level-1 patch 的 diff --git 文件头为空');
       }
       currentFile = {
         newPath: null,
@@ -338,13 +340,13 @@ export const analyzeMicroChangePatch = (
     }
     if (line.startsWith('@@ ')) {
       if (!currentFile?.oldPathSeen || !currentFile.newPathSeen) {
-        throw new Error('Micro Change patch 的 hunk 缺少完整文件头');
+        throw new Error('level-1 patch 的 hunk 缺少完整文件头');
       }
       const hunk = line.match(
         /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/,
       );
       if (!hunk) {
-        throw new Error('Micro Change 不接受无法解析的 unified diff hunk');
+        throw new Error('level-1 不接受无法解析的 unified diff hunk');
       }
       oldLinesRemaining = Number(hunk[1] ?? 1);
       newLinesRemaining = Number(hunk[2] ?? 1);
@@ -362,10 +364,10 @@ export const analyzeMicroChangePatch = (
         oldLinesRemaining -= 1;
         newLinesRemaining -= 1;
       } else if (!line.startsWith('\\ No newline at end of file')) {
-        throw new Error('Micro Change patch 包含非法 hunk 行');
+        throw new Error('level-1 patch 包含非法 hunk 行');
       }
       if (oldLinesRemaining < 0 || newLinesRemaining < 0) {
-        throw new Error('Micro Change patch 的 hunk 行数超出声明');
+        throw new Error('level-1 patch 的 hunk 行数超出声明');
       }
       if (oldLinesRemaining === 0 && newLinesRemaining === 0) {
         inHunk = false;
@@ -374,7 +376,7 @@ export const analyzeMicroChangePatch = (
     }
     if (line.startsWith('--- ')) {
       if (!currentFile || currentFile.oldPathSeen) {
-        throw new Error('Micro Change patch 包含重复或孤立的旧文件头');
+        throw new Error('level-1 patch 包含重复或孤立的旧文件头');
       }
       currentFile.oldPath = normalizePatchPath(line.slice(4), 'a/');
       currentFile.oldPathSeen = true;
@@ -382,7 +384,7 @@ export const analyzeMicroChangePatch = (
     }
     if (line.startsWith('+++ ')) {
       if (!currentFile?.oldPathSeen || currentFile.newPathSeen) {
-        throw new Error('Micro Change patch 包含重复或孤立的新文件头');
+        throw new Error('level-1 patch 包含重复或孤立的新文件头');
       }
       currentFile.newPath = normalizePatchPath(line.slice(4), 'b/');
       currentFile.newPathSeen = true;
@@ -392,12 +394,12 @@ export const analyzeMicroChangePatch = (
       return;
     }
     if (!currentFile || !ALLOWED_METADATA.some((pattern) => pattern.test(line))) {
-      throw new Error(`Micro Change patch 包含无法识别的结构行：${line}`);
+      throw new Error(`level-1 patch 包含无法识别的结构行：${line}`);
     }
   });
 
   if (inHunk) {
-    throw new Error('Micro Change patch 的 hunk 内容不完整');
+    throw new Error('level-1 patch 的 hunk 内容不完整');
   }
   completeCurrentFile();
   const fileCount = unifiedFiles.size;
@@ -428,6 +430,7 @@ export const validateMicroChangeRun = ({
   events,
   patchHash = '',
   repositoryId = '',
+  route = 'level-1',
   runId,
   sourceHash = '',
   stage,
@@ -438,51 +441,52 @@ export const validateMicroChangeRun = ({
   events: MicroRunEvent[];
   patchHash?: string;
   repositoryId?: string;
+  route?: string;
   runId: string;
   sourceHash?: string;
   stage: string;
 }, config: RoutesConfig = loadRoutes()): void => {
   if (!changeType) {
-    throw new Error('Micro Change Run Gate: 缺少变更类型');
+    throw new Error('Change Run Gate: 缺少变更类型');
   }
-  const stagePath = config.routes['micro-change']?.stagePaths?.[changeType] || [];
+  const stagePath = config.routes[route]?.stagePaths?.[changeType] || [];
   const stageIndex = stagePath.indexOf(stage);
   if (stageIndex < 0) {
-    throw new Error(`Micro Change Run Gate: 未知阶段 ${stage}`);
+    throw new Error(`Change Run Gate: 未知阶段 ${stage}`);
   }
   if (MICRO_GUARD_STAGES.has(stage) &&
       (!/^[a-f0-9]{16}$/.test(patchHash) ||
        !/^[a-f0-9]{12}$/.test(repositoryId) ||
        !/^[a-f0-9]{16}$/.test(sourceHash))) {
     throw new Error(
-      'Micro Change Run Gate: Review 起必须提供完整的 patch、仓库和来源绑定',
+      'Change Run Gate: Review 起必须提供完整的 patch、仓库和来源绑定',
     );
   }
   if (MICRO_BRIEF_STAGES.has(stage) && !/^[a-f0-9]{16}$/.test(briefPlanHash)) {
     throw new Error(
-      'Micro Change Run Gate: Implement 起必须提供有效的 Micro Brief 计划绑定',
+      'Change Run Gate: Implement 起必须提供有效的 Brief 计划绑定',
     );
   }
 
   const runEvents = events.filter((event) =>
     event.runId === runId && event.result === 'success');
-  if (runEvents.some((event) => event.route !== 'micro-change')) {
-    throw new Error('Micro Change Run Gate: Run ID 已绑定其他 Route');
+  if (runEvents.some((event) => event.route !== route)) {
+    throw new Error('Change Run Gate: Run ID 已绑定其他 Route');
   }
-  const microEvents = runEvents.filter((event) => event.route === 'micro-change');
+  const microEvents = runEvents.filter((event) => event.route === route);
   if (microEvents.some((event) => event.changeType !== changeType)) {
-    throw new Error('Micro Change Run Gate: Run ID 的变更类型不一致');
+    throw new Error('Change Run Gate: Run ID 的变更类型不一致');
   }
 
   if (stageIndex === 0) {
     if (!allowNewRun && !microEvents.some((event) => event.stage === stage)) {
-      throw new Error('Micro Change Run Gate: 首阶段 Run ID 不存在');
+      throw new Error('Change Run Gate: 首阶段 Run ID 不存在');
     }
   } else {
     stagePath.slice(0, stageIndex).forEach((requiredStage) => {
       if (!microEvents.some((event) => event.stage === requiredStage)) {
         throw new Error(
-          `Micro Change Run Gate: 缺少前置阶段 ${requiredStage}`,
+          `Change Run Gate: 缺少前置阶段 ${requiredStage}`,
         );
       }
     });
@@ -490,7 +494,7 @@ export const validateMicroChangeRun = ({
 
   const futureStages = new Set(stagePath.slice(stageIndex + 1));
   if (microEvents.some((event) => futureStages.has(event.stage))) {
-    throw new Error('Micro Change Run Gate: 不允许回退到已完成阶段之前');
+    throw new Error('Change Run Gate: 不允许回退到已完成阶段之前');
   }
 
   const guardedEvents = microEvents.filter((event) =>
@@ -502,14 +506,14 @@ export const validateMicroChangeRun = ({
      event.microSourceHash !== 'none' &&
      event.microSourceHash !== sourceHash))) {
     throw new Error(
-      'Micro Change Run Gate: 实际仓库、patch 或来源绑定已发生变化',
+      'Change Run Gate: 实际仓库、patch 或来源绑定已发生变化',
     );
   }
   const briefEvents = microEvents.filter((event) =>
     event.microBriefPlanHash && event.microBriefPlanHash !== 'none');
   if (briefPlanHash && briefEvents.some((event) =>
     event.microBriefPlanHash !== briefPlanHash)) {
-    throw new Error('Micro Change Run Gate: Micro Brief 计划追踪已发生变化');
+    throw new Error('Change Run Gate: Brief 计划追踪已发生变化');
   }
 };
 
@@ -540,7 +544,7 @@ export const verifyMicroPatchSource = ({
   assertGitExecutionCompleted('patch 校验', reverseCheck);
   if (reverseCheck.status !== 0) {
     throw new Error(
-      'Micro Change Source Gate: patch 与仓库当前内容不一致；' +
+      'level-1 Source Gate: patch 与仓库当前内容不一致；' +
       '请从当前任务改动重新生成 unified diff',
     );
   }
@@ -555,7 +559,7 @@ export const verifyMicroPatchSource = ({
     : '';
   if (!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(revision)) {
     throw new Error(
-      'Micro Change Source Gate: 无法确认仓库 HEAD；切换 standard-change/capture',
+      'level-1 Source Gate: 无法确认仓库 HEAD；切换 level-2/capture',
     );
   }
 
@@ -574,13 +578,13 @@ export const guardMicroChangePatch = (
 ): MicroPatchGuard => {
   const repositoryGuard = guardMicroRepository(repository);
   if (!repositoryGuard) {
-    throw new Error('Micro Change 实际范围检查必须提供 --repository');
+    throw new Error('Change 范围检查必须提供 --repository');
   }
-  const result = analyzeMicroChangePatch(patch, config.microChangeGate);
+  const result = analyzeMicroChangePatch(patch, config.changeGate);
   if (result.blockers.length > 0) {
     throw new Error(
-      `Micro Change 实际范围超出 Gate：${result.blockers.join(', ')}；` +
-      '切换 standard-change/capture',
+      `level-1 实际范围超出 Gate：${result.blockers.join(', ')}；` +
+      '切换 level-2/capture',
     );
   }
   const source = verifyMicroPatchSource({
@@ -592,7 +596,7 @@ export const guardMicroChangePatch = (
   return {
     ...result,
     repository: repositoryGuard.repository,
-    repositoryCount: config.microChangeGate.repositories,
+    repositoryCount: config.changeGate.repositories,
     repositoryId: repositoryGuard.repositoryId,
     ...source,
   };

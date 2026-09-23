@@ -42,6 +42,7 @@ import type { FactPredictionSet } from '../../src/core/fact-extraction-eval.js';
 import {
   guardMicroChangeScope,
   isInitialRouteStage,
+  guardLevelDeclaration,
   readArguments,
   readRouteArguments,
   renderRouteOutput,
@@ -92,7 +93,7 @@ const regressionExamplePath = path
       workflowRoot,
       'resources',
       'examples',
-      'micro-change-brief.sample.json',
+      'brief.sample.json',
     ),
   )
   .split(path.sep)
@@ -102,49 +103,49 @@ const regressionExamplePrefix = `${path.posix.dirname(regressionExamplePath)}/`;
 const skillScenarios = [
   {
     entry: 'pool',
-    route: 'pool-capture',
+    route: 'task-pool-capture',
     skills: providerSkill ? [providerSkill] : [],
     stage: 'capture',
   },
   {
     entry: 'direct',
-    route: 'micro-change',
+    route: 'level-1',
     skills: reviewSkill ? [reviewSkill] : [],
     stage: 'locate-requirement',
   },
   {
     entry: 'pool',
-    route: 'standard-change',
+    route: 'level-2',
     skills: [],
     stage: 'capture',
   },
   {
     entry: 'direct',
-    route: 'analysis',
+    route: 'task-analysis',
     skills: [],
     stage: 'analyze',
   },
   {
     entry: 'pool',
-    route: 'review-only',
+    route: 'task-review',
     skills: reviewSkill ? [reviewSkill] : [],
     stage: 'review',
   },
   {
     entry: 'not-applicable',
-    route: 'workflow-maintenance',
+    route: 'task-workflow-maintenance',
     skills: reviewSkill ? [reviewSkill] : [],
     stage: 'review',
   },
   {
     entry: 'not-applicable',
-    route: 'git-only',
+    route: 'task-git',
     skills: [],
     stage: 'inspect',
   },
   {
     entry: 'pool',
-    route: 'portable-resume',
+    route: 'task-portable-resume',
     skills: [],
     stage: 'resume',
   },
@@ -158,7 +159,7 @@ const standardImplementManifest = `# Task Manifest
 - Schema Version: 1
 - Task ID: 20260728-route-guard-regression
 - Run ID: run-0123456789abcdef
-- Route ID: standard-change
+- Route ID: level-2
 - Status: in_progress
 - Current Stage: Implement
 - State Mode: Conversation
@@ -198,9 +199,9 @@ const analysisManifest = `# Task Manifest
 
 ## Identity
 - Schema Version: 1
-- Task ID: 20260729-analysis-route-regression
+- Task ID: 20260729-task-analysis-route-regression
 - Run ID: run-abcdef0123456789
-- Route ID: analysis
+- Route ID: task-analysis
 - Status: in_progress
 - Current Stage: Analyze
 - State Mode: Portable
@@ -222,7 +223,7 @@ const analysisManifest = `# Task Manifest
 
 function withClassification(
   scenario: Omit<BuildRoutePacketOptions, 'classification'> & {
-    route: 'micro-change';
+    route: 'level-0' | 'level-1' | 'level-2' | 'level-3' | 'level-4';
   },
 ): BuildRoutePacketOptions & { classification: NonNullable<
   BuildRoutePacketOptions['classification']
@@ -233,7 +234,29 @@ function withClassification(
 function withClassification(
   scenario: Omit<BuildRoutePacketOptions, 'classification'>,
 ): BuildRoutePacketOptions {
-  if (scenario.route !== 'micro-change') {
+  if (scenario.route === 'level-0') {
+    return {
+      ...scenario,
+      classification: classifyRouteFacts({
+        acceptanceClear: true,
+        behaviorClear: true,
+        changeType: 'cosmetic',
+        compatibilityClear: true,
+        entry: scenario.entry,
+        files: 1,
+        goalClear: true,
+        hasValidationPath: true,
+        intent: 'change',
+        level: 0,
+        noNewBusinessState: true,
+        repositories: 1,
+        semanticLines: 2,
+        uniqueLocation: true,
+        usesExistingPattern: true,
+      }),
+    };
+  }
+  if (!['level-1', 'level-2', 'level-3', 'level-4'].includes(scenario.route)) {
     return scenario;
   }
   const changeType = scenario.stage.includes('requirement')
@@ -255,6 +278,30 @@ function withClassification(
     uniqueLocation: true,
     usesExistingPattern: changeType === 'requirement',
   };
+  if (['level-2', 'level-3', 'level-4'].includes(scenario.route)) {
+    const level = Number(scenario.route.slice('level-'.length));
+    return {
+      ...scenario,
+      classification: classifyRouteFacts({
+        acceptanceClear: true,
+        behaviorClear: true,
+        changeType: 'defect',
+        compatibilityClear: true,
+        entry: scenario.entry,
+        files: 1,
+        goalClear: true,
+        hasValidationPath: true,
+        intent: scenario.route === 'level-4' ? 'architecture' : 'change',
+        level,
+        modules: scenario.route === 'level-3' ? 2 : 1,
+        noNewBusinessState: true,
+        repositories: 1,
+        semanticLines: 2,
+        uniqueLocation: true,
+        usesExistingPattern: true,
+      }),
+    };
+  }
   return {
     ...scenario,
     classification: classifyRouteFacts(facts),
@@ -288,17 +335,18 @@ export const main = () => {
     const packets = [...matrixScenarios, ...skillScenarios]
       .map(withClassification)
       .map(buildRoutePacket);
+    const structuredFactRoutes = new Set(
+      Object.entries(config.routes)
+        .filter(([, route]) => route.factClassificationRequired === true)
+        .map(([routeName]) => routeName),
+    );
     packets.forEach((packet) => {
       assert.ok(packet.usedChars <= packet.budgetChars);
-      assert.equal(
-        packet.decision.confidence,
-        packet.route === 'micro-change' ? 1 : null,
-      );
+      const usesStructuredFacts = structuredFactRoutes.has(packet.route);
+      assert.equal(packet.decision.confidence, usesStructuredFacts ? 1 : null);
       assert.equal(
         packet.decision.confidenceBasis,
-        packet.route === 'micro-change'
-          ? 'structured-facts'
-          : 'manual-route-selection',
+        usesStructuredFacts ? 'structured-facts' : 'manual-route-selection',
       );
       assert.ok(packet.decision.reasonCodes.length > 0);
       assert.equal(packet.routesVersion, config.version);
@@ -350,7 +398,7 @@ export const main = () => {
         'workflow:README.md#分层',
         'workflow:docs/security-boundaries.md',
       ],
-      route: 'workflow-maintenance',
+      route: 'task-workflow-maintenance',
       stage: 'inspect',
     });
     assert.equal(referenceCombinationPacket.referenceDocs.length, 4);
@@ -366,7 +414,7 @@ export const main = () => {
     assert.throws(
       () => buildRoutePacket({
         entry: 'not-applicable',
-        route: 'micro-change',
+        route: 'level-1',
         stage: 'locate-defect',
       }),
       /不接受 Entry/,
@@ -374,7 +422,7 @@ export const main = () => {
     assert.throws(
       () => buildRoutePacket({
         entry: 'direct',
-        route: 'micro-change',
+        route: 'level-1',
         stage: 'unknown',
       }),
       /不包含 Stage/,
@@ -384,10 +432,10 @@ export const main = () => {
         entry: 'direct',
         classification: withClassification({
           entry: 'direct',
-          route: 'micro-change',
+          route: 'level-1',
           stage: 'locate-defect',
         }).classification,
-        route: 'micro-change',
+        route: 'level-1',
         skills: ['missing-skill'],
         stage: 'locate-defect',
       }),
@@ -398,41 +446,41 @@ export const main = () => {
         classification: {
           ...withClassification({
             entry: 'direct',
-            route: 'micro-change',
+            route: 'level-1',
             stage: 'locate-defect',
           }).classification,
           riskFlags: ['interface-change'],
         },
         entry: 'direct',
-        route: 'micro-change',
+        route: 'level-1',
         stage: 'locate-defect',
       }),
       /禁止风险标识/,
     );
     assert.throws(
-      () => buildRoutePacket({
+      () => buildRoutePacket(withClassification({
         entry: 'direct',
         riskFlags: ['invented-risk'],
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'capture',
-      }),
+      })),
       /未知 Risk Flag/,
     );
     assert.throws(
-      () => buildRoutePacket({
+      () => buildRoutePacket(withClassification({
         entry: 'direct',
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'capture',
         taskId: '../invalid',
-      }),
+      })),
       /Task ID 只能包含/,
     );
-    const prdReferencePacket = buildRoutePacket({
+    const prdReferencePacket = buildRoutePacket(withClassification({
       entry: 'direct',
       references: ['workflow:docs/02-prd.md'],
-      route: 'standard-change',
+      route: 'level-2',
       stage: 'prd',
-    });
+    }));
     assert.deepEqual(
       prdReferencePacket.referenceDocs,
       ['workflow:docs/02-prd.md'],
@@ -444,7 +492,7 @@ export const main = () => {
       () => buildRoutePacket({
         entry: 'direct',
         references: ['workflow:docs/08-git.md'],
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'prd',
       }),
       /不允许 Reference/,
@@ -458,7 +506,7 @@ export const main = () => {
     );
 
     const lowBudgetConfig = JSON.parse(JSON.stringify(config));
-    lowBudgetConfig.routes['micro-change'].budgetChars = 100;
+    lowBudgetConfig.routes['level-1'].budgetChars = 100;
     assert.match(
       validateRoutes(lowBudgetConfig).errors.join('\n'),
       /超过预算/,
@@ -466,30 +514,30 @@ export const main = () => {
     assert.doesNotMatch(
       validateRoutes(lowBudgetConfig, {
         budgetScope: {
-          route: 'standard-change',
+          route: 'level-2',
           stage: 'capture',
         },
       }).errors.join('\n'),
-      /micro-change\/.*超过预算/,
+      /level-1\/.*超过预算/,
     );
     assert.match(
       validateRoutes(lowBudgetConfig, {
         budgetScope: {
-          route: 'micro-change',
+          route: 'level-1',
           stage: 'locate-defect',
         },
       }).errors.join('\n'),
-      /micro-change\/locate-defect: 预计 .*超过预算/,
+      /level-1\/locate-defect: 预计 .*超过预算/,
     );
     const invalidStagePathConfig = JSON.parse(JSON.stringify(config));
-    invalidStagePathConfig.routes['micro-change'].stagePaths.defect[0] =
+    invalidStagePathConfig.routes['level-1'].stagePaths.defect[0] =
       'missing-stage';
     assert.match(
       validateRoutes(invalidStagePathConfig).errors.join('\n'),
       /未知 Stage missing-stage/,
     );
     const duplicateTaskStageConfig = JSON.parse(JSON.stringify(config));
-    duplicateTaskStageConfig.routes.analysis.stages.report = {
+    duplicateTaskStageConfig.routes['task-analysis'].stages.report = {
       docs: ['workflow:resources/cards/report.md'],
       next: '重复映射',
       taskStages: ['Analyze'],
@@ -499,7 +547,7 @@ export const main = () => {
       /Analyze 必须映射到唯一运行阶段，实际 2/,
     );
     const escapedCardConfig = JSON.parse(JSON.stringify(config));
-    escapedCardConfig.routes.analysis.stages.analyze.docs = [
+    escapedCardConfig.routes['task-analysis'].stages.analyze.docs = [
       'workflow:resources/cards/../hooks/pre-commit',
     ];
     assert.match(
@@ -513,10 +561,10 @@ export const main = () => {
       /禁止把深度参考加入启动链/,
     );
     const missingSectionConfig = JSON.parse(JSON.stringify(config));
-    missingSectionConfig.routes['pool-capture'].references.push(
+    missingSectionConfig.routes['task-pool-capture'].references.push(
       'workflow:docs/source-capture.md#missing-section',
     );
-    missingSectionConfig.routes['pool-capture'].stages.capture.references.push(
+    missingSectionConfig.routes['task-pool-capture'].stages.capture.references.push(
       'workflow:docs/source-capture.md#missing-section',
     );
     assert.match(
@@ -524,7 +572,7 @@ export const main = () => {
       /Markdown 章节不存在/,
     );
     const missingTaskStagesConfig = JSON.parse(JSON.stringify(config));
-    delete missingTaskStagesConfig.routes.analysis.stages.capture.taskStages;
+    delete missingTaskStagesConfig.routes['task-analysis'].stages.capture.taskStages;
     assert.match(
       validateRoutes(missingTaskStagesConfig).errors.join('\n'),
       /taskFlow 路由必须登记 taskStages/,
@@ -536,23 +584,23 @@ export const main = () => {
       /routeWarningRemainingRatio/,
     );
     const invalidMicroGateConfig = JSON.parse(JSON.stringify(config));
-    invalidMicroGateConfig.microChangeGate.maxFiles = 0;
+    invalidMicroGateConfig.changeGate.maxFiles = 0;
     assert.match(
       validateRoutes(invalidMicroGateConfig).errors.join('\n'),
-      /microChangeGate\.maxFiles/,
+      /changeGate\.maxFiles/,
     );
 
     const materializePacket = buildRoutePacket(withClassification({
       entry: 'direct',
-      route: 'micro-change',
+      route: 'level-1',
       stage: 'locate-defect',
     }));
     const materializedText = materializeRoutePacket(materializePacket, 'text');
     assert.equal(materializedText.complete, true);
     assert.ok(materializedText.outputChars <= materializePacket.toolOutputDefaultChars);
-    assert.match(materializedText.output, /^Runtime Context: micro-change\/locate-defect/);
+    assert.match(materializedText.output, /^Runtime Context: level-1\/locate-defect/);
     assert.doesNotMatch(materializedText.output, /^Route Packet/);
-    assert.match(materializedText.output, /# Micro Change Card/);
+    assert.match(materializedText.output, /# level-1 Card/);
     assert.match(materializedText.output, /# Implementation Approval Card/);
     assert.match(materializedText.output, /# Defect Intent Card/);
     assert.match(materializedText.output, /设计根因/);
@@ -567,7 +615,7 @@ export const main = () => {
     assert.equal(parsedMaterializedJson.materializedContext.length, 4);
     const standardPlanPacket = buildRoutePacket({
       entry: 'direct',
-      route: 'standard-change',
+      route: 'level-2',
       stage: 'spec-plan',
     });
     const materializedStandardPlan = materializeRoutePacket(
@@ -582,7 +630,7 @@ export const main = () => {
     const sectionPacket = buildRoutePacket({
       entry: 'direct',
       references: ['workflow:docs/source-capture.md#direct-entry'],
-      route: 'standard-change',
+      route: 'level-2',
       stage: 'capture',
     });
     const materializedSection = materializeRoutePacket(sectionPacket, 'text');
@@ -679,12 +727,12 @@ export const main = () => {
     const nextRoute = deriveNextRouteFromModel({
       currentStage: 'Implement',
       entryMode: 'direct',
-      routeId: 'standard-change',
+      routeId: 'level-2',
       runId: 'run-0123456789abcdef',
     }, 'sample-task', config);
     assert.deepEqual(nextRoute, {
       entry: 'direct',
-      route: 'standard-change',
+      route: 'level-2',
       runId: 'run-0123456789abcdef',
       stage: 'implement',
       taskId: 'sample-task',
@@ -692,68 +740,134 @@ export const main = () => {
     assert.deepEqual(deriveNextRouteFromModel({
       currentStage: 'Analyze',
       entryMode: 'direct',
-      routeId: 'analysis',
+      routeId: 'task-analysis',
       runId: 'run-abcdef0123456789',
-    }, 'analysis-task', config), {
+    }, 'task-analysis-task', config), {
       entry: 'direct',
-      route: 'analysis',
+      route: 'task-analysis',
       runId: 'run-abcdef0123456789',
       stage: 'analyze',
-      taskId: 'analysis-task',
+      taskId: 'task-analysis-task',
     });
     assert.deepEqual(
       buildNextRouteArguments(nextRoute, ['--materialize']),
       [
-        '--route', 'standard-change',
+        '--route', 'level-2',
         '--stage', 'implement',
         '--entry', 'direct',
         '--task', 'sample-task',
+        '--level', '2',
         '--materialize',
       ],
     );
     assert.throws(
       () => validateImplementationApproval({
-        route: 'micro-change',
+        route: 'level-1',
         stage: 'implement',
       }),
       /Implementation Approval Gate/,
     );
     assert.throws(
       () => validateImplementationApproval({
-        route: 'standard-change',
+        route: 'level-2',
+        stage: 'implement',
+      }),
+      /Implementation Approval Gate/,
+    );
+    assert.throws(
+      () => validateImplementationApproval({
+        route: 'task-workflow-maintenance',
         stage: 'implement',
       }),
       /Implementation Approval Gate/,
     );
     assert.doesNotThrow(() => validateImplementationApproval({
-      route: 'micro-change',
+      route: 'task-workflow-maintenance',
+      stage: 'implement',
+      userApproved: true,
+    }));
+    assert.throws(
+      () => guardLevelDeclaration({ level: null, route: 'level-0' }),
+      /必须显式声明 --level 0/,
+    );
+    assert.doesNotThrow(() => guardLevelDeclaration({
+      level: 0,
+      route: 'level-0',
+    }));
+    assert.doesNotThrow(() => guardLevelDeclaration({
+      level: null,
+      route: 'task-analysis',
+    }));
+    assert.throws(
+      () => guardLevelDeclaration({ level: 0, route: 'level-1' }),
+      /只允许用于声明 requiredLevel/,
+    );
+    assert.throws(
+      () => guardLevelDeclaration({ level: 2, route: 'level-0' }),
+      /只允许用于声明 requiredLevel/,
+    );
+    const declaredLevelArguments = readRouteArguments([
+      '--route', 'level-0',
+      '--stage', 'locate-cosmetic',
+      '--entry', 'direct',
+      '--intent', 'cosmetic',
+      '--level', '0',
+    ]);
+    assert.equal(declaredLevelArguments.level, 0);
+    assert.equal(declaredLevelArguments.classificationFacts?.level, 0);
+    const singleModuleFacts = {
+      acceptanceClear: true,
+      changeType: 'defect',
+      entry: 'direct',
+      files: 1,
+      goalClear: true,
+      hasValidationPath: true,
+      intent: 'change',
+      repositories: 1,
+      semanticLines: 2,
+      uniqueLocation: true,
+    };
+    assert.equal(classifyRouteFacts(singleModuleFacts).route, 'level-1');
+    assert.equal(classifyRouteFacts({ ...singleModuleFacts, level: 2 }).route, 'level-2');
+    assert.equal(classifyRouteFacts({ ...singleModuleFacts, level: 2 }).stage, 'capture');
+    assert.equal(classifyRouteFacts({ ...singleModuleFacts, modules: 2 }).route, 'level-3');
+    assert.equal(
+      classifyRouteFacts({ ...singleModuleFacts, riskFlags: ['state-refactor'] }).route,
+      'level-3',
+    );
+    assert.throws(
+      () => classifyRouteFacts({ ...singleModuleFacts, level: 0 }),
+      /不能声明更低的 --level 0/,
+    );
+    assert.doesNotThrow(() => validateImplementationApproval({
+      route: 'level-1',
       stage: 'implement',
       userApproved: true,
     }));
     assert.throws(
       () => validateImplementationApproval({
-        route: 'micro-change',
+        route: 'level-1',
         stage: 'locate-defect',
         userApproved: true,
       }),
       /只允许用于/,
     );
     const fileArguments = readArguments([
-      '--micro-brief-file', regressionBriefPath,
-      '--micro-patch-file', regressionPatchPath,
+      '--brief-file', regressionBriefPath,
+      '--patch-file', regressionPatchPath,
       '--parent-run-id', 'run-abcdef0123456789',
     ]);
     assert.equal(
-      fileArguments.microBriefFile,
+      fileArguments.briefFile,
       regressionBriefPath,
     );
     assert.equal(
-      fileArguments.microPatchFile,
+      fileArguments.patchFile,
       regressionPatchPath,
     );
     assert.equal(fileArguments.parentRunId, 'run-abcdef0123456789');
     const classifiedArguments = readRouteArguments([
-      '--route', 'micro-change',
+      '--route', 'level-1',
       '--stage', 'locate-defect',
       '--entry', 'direct',
       '--intent', 'defect',
@@ -773,11 +887,11 @@ export const main = () => {
       classificationFacts,
     );
     const locateScope = guardMicroChangeScope({
-      microBriefFile: '',
-      microPatchFile: '',
-      microPatchStdin: false,
+      briefFile: '',
+      patchFile: '',
+      patchStdin: false,
       repository: '.',
-      route: 'micro-change',
+      route: 'level-1',
       runId: 'run-0123456789abcdef',
       stage: 'locate-defect',
     }, locateClassification, true, []);
@@ -812,11 +926,11 @@ export const main = () => {
     );
     assert.throws(
       () => guardMicroChangeScope({
-        microBriefFile: regressionBriefPath,
-        microPatchFile: regressionPatchPath,
-        microPatchStdin: false,
+        briefFile: regressionBriefPath,
+        patchFile: regressionPatchPath,
+        patchStdin: false,
         repository: '',
-        route: 'micro-change',
+        route: 'level-1',
         runId: 'run-0123456789abcdef',
         stage: 'review-defect',
       }, locateClassification, false, []),
@@ -826,20 +940,20 @@ export const main = () => {
       classification: locateClassification,
       entry: 'direct',
       microRepository: locateScope.microRepository,
-      route: 'micro-change',
+      route: 'level-1',
       stage: 'locate-defect',
     });
     assert.match(formatRoutePacket(repositoryPacket), /location-hint/);
     assert.equal(
       isInitialRouteStage(
-        { route: 'micro-change', stage: 'locate-defect' },
+        { route: 'level-1', stage: 'locate-defect' },
         classifyRouteFacts(classificationFacts),
       ),
       true,
     );
     assert.equal(
       isInitialRouteStage(
-        { route: 'workflow-maintenance', stage: 'review' },
+        { route: 'task-workflow-maintenance', stage: 'review' },
         null,
       ),
       false,
@@ -1011,7 +1125,7 @@ export const main = () => {
         config,
         { runGit: () => ({ status: 1, stdout: '' }) },
       ),
-      /Micro Change Source Gate: patch 与仓库当前内容不一致/,
+      /level-1 Source Gate: patch 与仓库当前内容不一致/,
     );
     let timeoutPatchPath = '';
     assert.throws(
@@ -1030,7 +1144,7 @@ export const main = () => {
           },
         },
       ),
-      /Micro Change Source Gate: Git patch 校验执行超时 \(ETIMEDOUT\)/,
+      /level-1 Source Gate: Git patch 校验执行超时 \(ETIMEDOUT\)/,
     );
     assert.equal(existsSync(timeoutPatchPath), false);
     assert.throws(
@@ -1046,7 +1160,7 @@ export const main = () => {
           }),
         },
       ),
-      /Micro Change Source Gate: 无法执行 Git patch 校验 \(ENOENT\)/,
+      /level-1 Source Gate: 无法执行 Git patch 校验 \(ENOENT\)/,
     );
     assert.throws(
       () => guardMicroChangePatch(
@@ -1058,7 +1172,7 @@ export const main = () => {
             : { status: 0, stdout: '' },
         },
       ),
-      /Micro Change Source Gate: 无法确认仓库 HEAD/,
+      /level-1 Source Gate: 无法确认仓库 HEAD/,
     );
 
     const sourceGateRepositoryRoot = mkdtempSync(
@@ -1107,7 +1221,7 @@ export const main = () => {
         workflowRoot,
         'resources',
         'examples',
-        'micro-change-brief.sample.json',
+        'brief.sample.json',
       ),
       'utf8',
     );
@@ -1200,7 +1314,7 @@ export const main = () => {
     const childRunId = 'run-abcdef0123456789';
     const parentEvents = [{
       result: 'success',
-      route: 'pool-capture',
+      route: 'task-pool-capture',
       runId: parentRunId,
       stage: 'capture',
     }];
@@ -1209,7 +1323,7 @@ export const main = () => {
       events: parentEvents,
       initialRouteStage: 'locate-defect',
       initialStage: true,
-      route: 'micro-change',
+      route: 'level-1',
       runId: parentRunId,
     }), /Run Route Gate/);
     assert.doesNotThrow(() => validateRunLineage({
@@ -1218,7 +1332,7 @@ export const main = () => {
       initialRouteStage: 'locate-defect',
       initialStage: true,
       parentRunId,
-      route: 'micro-change',
+      route: 'level-1',
       runId: childRunId,
     }));
     assert.throws(() => validateRunLineage({
@@ -1227,7 +1341,7 @@ export const main = () => {
       initialRouteStage: 'locate-defect',
       initialStage: false,
       parentRunId,
-      route: 'micro-change',
+      route: 'level-1',
       runId: childRunId,
     }), /只允许在新 Route 首阶段/);
     assert.throws(() => validateRunLineage({
@@ -1236,20 +1350,20 @@ export const main = () => {
       initialRouteStage: 'locate-defect',
       initialStage: true,
       parentRunId,
-      route: 'micro-change',
+      route: 'level-1',
       runId: childRunId,
     }), /Parent Run 不存在/);
     assert.throws(() => validateRunLineage({
       createdRunId: true,
       events: [{
         result: 'success',
-        route: 'micro-change',
+        route: 'level-1',
         runId: parentRunId,
       }],
       initialRouteStage: 'locate-defect',
       initialStage: true,
       parentRunId,
-      route: 'micro-change',
+      route: 'level-1',
       runId: childRunId,
     }), /只用于切换 Route/);
     assert.throws(() => validateRunLineage({
@@ -1257,22 +1371,22 @@ export const main = () => {
       events: [],
       initialRouteStage: 'capture',
       initialStage: true,
-      route: 'review-only',
+      route: 'task-review',
       runId: childRunId,
     }), /Run Continuity Gate: .*不存在或没有成功事件/);
     assert.throws(() => validateRunLineage({
       createdRunId: false,
       events: [{
         result: 'success',
-        route: 'review-only',
+        route: 'task-review',
         runId: childRunId,
         stage: 'review',
       }],
       initialRouteStage: 'capture',
       initialStage: false,
-      route: 'review-only',
+      route: 'task-review',
       runId: childRunId,
-    }), /缺少首阶段 review-only\/capture/);
+    }), /缺少首阶段 task-review\/capture/);
 
     const microRunId = 'run-0123456789abcdef';
     const microBriefPlanHash = '1122334455667788';
@@ -1282,7 +1396,7 @@ export const main = () => {
         microPatchHash: 'none',
         microRepositoryId: 'none',
         result: 'success',
-        route: 'micro-change',
+        route: 'level-1',
         runId: microRunId,
         stage: 'locate-defect',
       },
@@ -1292,7 +1406,7 @@ export const main = () => {
         microPatchHash: 'none',
         microRepositoryId: 'none',
         result: 'success',
-        route: 'micro-change',
+        route: 'level-1',
         runId: microRunId,
         stage: 'implement',
       },
@@ -1330,7 +1444,7 @@ export const main = () => {
       microRepositoryId: '0123456789ab',
       microSourceHash: 'abcdef0123456789',
       result: 'success',
-      route: 'micro-change',
+      route: 'level-1',
       runId: microRunId,
       stage: 'review-defect',
     });
@@ -1376,7 +1490,7 @@ export const main = () => {
       runId: microRunId,
       sourceHash: 'abcdef0123456789',
       stage: 'verify-defect',
-    }, config), /Micro Brief 计划追踪已发生变化/);
+    }, config), /Brief 计划追踪已发生变化/);
     const routeSuite = JSON.parse(readFileSync(
       resolveWorkflowLocator(activeProfile.evals.routeCases, 'evals.routeCases'),
       'utf8',
@@ -1410,7 +1524,7 @@ export const main = () => {
     assert.equal(
       validateRouteTaskState({
         entry: 'direct',
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'capture',
       }),
       null,
@@ -1419,7 +1533,7 @@ export const main = () => {
       artifacts: standardArtifacts,
       entry: 'direct',
       manifestContent: standardImplementManifest,
-      route: 'standard-change',
+      route: 'level-2',
       runId: 'run-0123456789abcdef',
       stage: 'implement',
       taskId: '20260728-route-guard-regression',
@@ -1431,7 +1545,7 @@ export const main = () => {
         artifacts: { ...standardArtifacts, 'plan.md': undefined },
         entry: 'direct',
         manifestContent: standardImplementManifest,
-        route: 'standard-change',
+        route: 'level-2',
         runId: 'run-0123456789abcdef',
         stage: 'implement',
         taskId: '20260728-route-guard-regression',
@@ -1441,10 +1555,10 @@ export const main = () => {
     const validAnalysisTaskGate = validateRouteTaskState({
       entry: 'direct',
       manifestContent: analysisManifest,
-      route: 'analysis',
+      route: 'task-analysis',
       runId: 'run-abcdef0123456789',
       stage: 'analyze',
-      taskId: '20260729-analysis-route-regression',
+      taskId: '20260729-task-analysis-route-regression',
     });
     assert.ok(validAnalysisTaskGate);
     assert.equal(validAnalysisTaskGate.currentStage, 'Analyze');
@@ -1452,25 +1566,25 @@ export const main = () => {
       () => validateRouteTaskState({
         entry: 'direct',
         manifestContent: analysisManifest,
-        route: 'analysis',
+        route: 'task-analysis',
         stage: 'capture',
-        taskId: '20260729-analysis-route-regression',
+        taskId: '20260729-task-analysis-route-regression',
       }),
       /Current Stage 为 Source Capture 或 Intake/,
     );
     assert.throws(
       () => validateRouteTaskState({
         entry: 'direct',
-        route: 'micro-change',
+        route: 'level-1',
         stage: 'implement',
-        taskId: '20260729-analysis-route-regression',
+        taskId: '20260729-task-analysis-route-regression',
       }),
       /未定义 taskFlow/,
     );
     assert.throws(
       () => validateRouteTaskState({
         entry: 'direct',
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'implement',
       }),
       /必须提供 --task/,
@@ -1479,7 +1593,7 @@ export const main = () => {
       () => validateRouteTaskState({
         entry: 'direct',
         manifestContent: '# invalid manifest',
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'implement',
         taskId: '20260728-route-guard-regression',
       }),
@@ -1493,7 +1607,7 @@ export const main = () => {
           '- Entry Mode: direct',
           '- Entry Mode:',
         ),
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'implement',
         taskId: '20260728-route-guard-regression',
       }),
@@ -1504,7 +1618,7 @@ export const main = () => {
         artifacts: standardArtifacts,
         entry: 'direct',
         manifestContent: standardImplementManifest,
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'review',
         taskId: '20260728-route-guard-regression',
       }),
@@ -1521,7 +1635,7 @@ export const main = () => {
         },
         entry: 'direct',
         manifestContent: standardImplementManifest,
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'implement',
         taskId: '20260728-route-guard-regression',
       }),
@@ -1532,7 +1646,7 @@ export const main = () => {
         artifacts: standardArtifacts,
         entry: 'direct',
         manifestContent: standardImplementManifest,
-        route: 'standard-change',
+        route: 'level-2',
         runId: 'run-fedcba9876543210',
         stage: 'implement',
         taskId: '20260728-route-guard-regression',
@@ -1547,7 +1661,7 @@ export const main = () => {
         },
         entry: 'direct',
         manifestContent: standardImplementManifest,
-        route: 'standard-change',
+        route: 'level-2',
         stage: 'implement',
         taskId: '20260728-route-guard-regression',
       }),
@@ -1565,7 +1679,7 @@ export const main = () => {
 - Schema Version: 1
 - Task ID: ${maintenanceTaskId}
 - Run ID: run-1234567890abcdef
-- Route ID: workflow-maintenance
+- Route ID: task-workflow-maintenance
 - Status: in_progress
 - Current Stage: Inspect
 - State Mode: Conversation
@@ -1617,7 +1731,7 @@ export const main = () => {
       `路由回归检查通过：${matrixScenarios.length} 个矩阵路径、` +
       `${skillScenarios.length} 个 Skill 场景、` +
       `${referenceScenarios.length} 个 Reference 场景、` +
-      '覆盖路由反例、上下文输出、分类绑定、Micro Brief / patch、Run 血缘、' +
+      '覆盖路由反例、上下文输出、分类绑定、Brief / patch、Run 血缘、' +
       '文本 facts、任务门禁和参数兼容；' +
       '最大 Packet ' +
       `${largestPacket.route}/${largestPacket.stage} ` +

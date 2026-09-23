@@ -79,7 +79,7 @@ export const main = (): number => {
     git(['add', 'tracked.txt']);
     git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'fixture baseline']);
 
-    run(['task', 'init', '--task', taskId, '--route', 'standard-change', '--entry', 'direct',
+    run(['task', 'init', '--task', taskId, '--route', 'level-2', '--entry', 'direct',
       '--goal', 'Persist execution progress for a fresh process', '--source-type', 'requirement',
       '--source-text', 'Resume remaining work directly from saved task artifacts']);
     const initialManifest = read('manifest.md');
@@ -148,7 +148,7 @@ export const main = (): number => {
     assert.ok(logs.startsWith(`${root}${path.sep}`));
     rmSync(logs, { recursive: true, force: true });
     assert.match(run(['next', '--task', taskId, '--format', 'json', '--user-approved']), /implement/);
-    assert.match(run(['route', '--route', 'standard-change', '--stage', 'implement', '--entry', 'direct', '--task', taskId, '--format', 'json', '--user-approved']), /implement/);
+    assert.match(run(['route', '--route', 'level-2', '--stage', 'implement', '--entry', 'direct', '--task', taskId, '--format', 'json', '--user-approved']), /implement/);
 
     const staleRevision = checkpoint().revision;
     item('T2', 'active', ['--user-approved']);
@@ -201,7 +201,7 @@ export const main = (): number => {
     write('manifest.md', unpublishedManifest);
     assert.equal(status(1).action, 'reconcile');
     assert.match(run(['next', '--task', taskId], 1), /Unpublished/);
-    assert.match(run(['route', '--route', 'standard-change', '--stage', 'git-inspect', '--entry', 'direct', '--task', taskId], 1), /Unpublished/);
+    assert.match(run(['route', '--route', 'level-2', '--stage', 'git-inspect', '--entry', 'direct', '--task', taskId], 1), /Unpublished/);
     assert.match(lifecycle('complete', ['--evidence', 'Must not publish interrupted state'], 1), /Unpublished/);
     assert.match(advance('Git Inspect', [], 1), /Unpublished/);
     assert.match(lifecycle('block', ['--reason', 'Must not write through interrupted state'], 1), /Unpublished/);
@@ -243,7 +243,7 @@ export const main = (): number => {
 
     const legacyId = 'legacy-persistence-fixture';
     const legacyDirectory = path.join(root, '.agent-workflow/tasks/local', legacyId);
-    const legacyRoute = JSON.parse(invoke(['route', '--route', 'standard-change', '--stage', 'capture', '--entry', 'direct', '--format', 'json']).stdout) as { runId: string };
+    const legacyRoute = JSON.parse(invoke(['route', '--route', 'level-2', '--stage', 'capture', '--entry', 'direct', '--format', 'json']).stdout) as { runId: string };
     mkdirSync(legacyDirectory, { recursive: true });
     const legacyManifest = initialManifest.replace('Schema Version: 2', 'Schema Version: 1').replace('State Mode: Persistent', 'State Mode: Conversation')
       .replace(`Task ID: ${taskId}`, `Task ID: ${legacyId}`).replace(/^- Run ID: .*$/m, `- Run ID: ${legacyRoute.runId}`);

@@ -19,7 +19,7 @@ Qoder 支持读取根目录 `AGENTS.md`，由它进入 setup 写入的实际 `ST
 
 ## Portable Handoff
 
-- 接手业务任务时先用 `portable-resume` 读取 manifest/source/handoff 当前摘要，再只读核对 Git 状态。
+- 接手业务任务时先用 `task-portable-resume` 读取 manifest/source/handoff 当前摘要，再只读核对 Git 状态。
 - Qoder 的 Memory、Snapshots、会话历史和内部任务卡不能替代 Portable 任务产物。
 - 离开 Qoder 前更新 `Resume`、`handoff.md`、Review 和 Verify 状态。
 

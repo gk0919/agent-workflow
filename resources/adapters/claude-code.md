@@ -7,7 +7,7 @@
 ## 执行方式
 
 - `CLAUDE.md` 只导入 `AGENTS.md` 并指向 setup 解析出的实际 `START.md` 包路径，后续文件由启动协议按需加载。
-- Portable 业务任务先用 `portable-resume` 读取 manifest/source/handoff 当前摘要，内部 Todo 或会话记忆不能替代它们。
+- Portable 业务任务先用 `task-portable-resume` 读取 manifest/source/handoff 当前摘要，内部 Todo 或会话记忆不能替代它们。
 - 大任务先生成 Plan，并随执行更新状态。
 - 支持 subagent 时，可拆分以下角色：
   - locator: 定位文件和影响范围

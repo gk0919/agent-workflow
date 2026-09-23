@@ -12,8 +12,9 @@ import type {
 import { errorMessage } from '../types/guards.js';
 
 type BooleanRouteFactKey = Exclude<keyof RouteFacts,
-  'changeType' | 'entry' | 'files' | 'intent' | 'repositories' | 'riskFlags' | 'semanticLines'>;
-type NumberRouteFactKey = 'files' | 'repositories' | 'semanticLines';
+  'changeType' | 'entry' | 'files' | 'intent' | 'level' |
+  'modules' | 'repositories' | 'riskFlags' | 'semanticLines'>;
+type NumberRouteFactKey = 'files' | 'modules' | 'repositories' | 'semanticLines';
 type RouteFactsInput = Partial<RouteFacts>;
 type ParsedRouteFacts = RouteFactsInput & { format?: string };
 
@@ -38,6 +39,7 @@ export const booleanOptions = new Map<string, BooleanRouteFactKey>([
 
 export const numberOptions = new Map<string, NumberRouteFactKey>([
   ['--files', 'files'],
+  ['--modules', 'modules'],
   ['--repositories', 'repositories'],
   ['--semantic-lines', 'semanticLines'],
 ]);
@@ -91,6 +93,15 @@ export const extractRouteClassificationArgs = (
       index += 1;
       continue;
     }
+    if (argument === '--level') {
+      const value = Number(args[index + 1]);
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error('--level 必须提供非负整数');
+      }
+      facts.level = value;
+      index += 1;
+      continue;
+    }
     if (argument) {
       remainingArgs.push(argument);
     }
@@ -112,6 +123,8 @@ export const normalizeRouteFacts = (facts: RouteFactsInput = {}): RouteFacts => 
   goalClear: Boolean(facts.goalClear),
   hasValidationPath: Boolean(facts.hasValidationPath),
   intent: typeof facts.intent === 'string' ? facts.intent : '',
+  level: typeof facts.level === 'number' && Number.isInteger(facts.level) ? facts.level : null,
+  modules: typeof facts.modules === 'number' && Number.isInteger(facts.modules) ? facts.modules : 0,
   noNewBusinessState: Boolean(facts.noNewBusinessState),
   repositories: typeof facts.repositories === 'number' && Number.isInteger(facts.repositories)
     ? facts.repositories
@@ -159,7 +172,7 @@ export const validateRouteFacts = (
   if (!allEntries.has(facts.entry)) {
     errors.push(`未知 entry：${facts.entry || '空'}`);
   }
-  const numberFields: NumberRouteFactKey[] = ['files', 'repositories', 'semanticLines'];
+  const numberFields: NumberRouteFactKey[] = ['files', 'modules', 'repositories', 'semanticLines'];
   numberFields.forEach((field) => {
     if (!Number.isInteger(facts[field]) || facts[field] < 0) {
       errors.push(`${field} 必须是非负整数`);
@@ -170,6 +183,9 @@ export const validateRouteFacts = (
   if (unknownRisks.length > 0) {
     errors.push(`未知风险标识：${unknownRisks.join(', ')}`);
   }
+  if (facts.level !== null && (facts.level < 0 || facts.level > 4)) {
+    errors.push(`level 必须在 0 到 4 之间：${facts.level}`);
+  }
   const allowedEntries = taskModel.expectedIntentEntries[facts.intent];
   if (allowedEntries && !allowedEntries.includes(facts.entry)) {
     errors.push(`${facts.intent} 不接受 entry ${facts.entry}`);
@@ -179,12 +195,13 @@ export const validateRouteFacts = (
 
 const commonMicroChangeBlockers = (
   facts: RouteFacts,
-  gate: RoutesConfig['microChangeGate'],
+  gate: RoutesConfig['changeGate'],
 ): string[] => [
   ...(!facts.goalClear ? ['goal-unclear'] : []),
   ...(!facts.acceptanceClear ? ['acceptance-unclear'] : []),
   ...(!facts.uniqueLocation ? ['location-not-unique'] : []),
   ...(facts.repositories !== gate.repositories ? ['repository-count'] : []),
+  ...(facts.modules > 1 ? ['cross-module'] : []),
   ...(facts.files < gate.minFiles || facts.files > gate.maxFiles
     ? ['file-count']
     : []),
@@ -240,7 +257,7 @@ export const classifyRouteFacts = (
       changeClass: null,
       changeType: null,
       entry: facts.entry,
-      microChangeEligible: false,
+      lightEligible: false,
       reasonCodes: [`intent:${facts.intent}`],
       riskFlags: facts.riskFlags,
       route,
@@ -252,30 +269,50 @@ export const classifyRouteFacts = (
     throw new Error(`${facts.intent} 不接受 entry ${facts.entry}`);
   }
   const changeType = changeTypeFor(facts, taskModel);
-  const gate = config.microChangeGate;
+  const gate = config.changeGate;
   const blockers = [
     ...commonMicroChangeBlockers(facts, gate),
     ...(taskModel.evolutionaryChangeTypes.includes(changeType)
       ? evolutionaryMicroChangeBlockers(facts)
       : []),
   ];
-  const microChangeEligible = blockers.length === 0;
-  const microStage = taskModel.microStages[changeType];
-  if (microChangeEligible && !microStage) {
-    throw new Error(`changeType ${changeType} 缺少 Micro Change Stage`);
+  const lightEligible = blockers.length === 0;
+  const cosmetic = changeType === 'cosmetic';
+  // A route may declare which facts escalate to it; its requiredLevel is the derived grade.
+  const escalation = lightEligible
+    ? undefined
+    : Object.values(config.routes).find((route) =>
+      (route.escalationMinModules !== undefined && facts.modules >= route.escalationMinModules) ||
+      (route.escalationRiskFlags ?? []).some((flag) => facts.riskFlags.includes(flag)));
+  const derivedLevel = lightEligible
+    ? (cosmetic ? 0 : 1)
+    : escalation?.requiredLevel ?? 2;
+  const declaredLevel = facts.level ?? derivedLevel;
+  const selectedRoute = `level-${declaredLevel}`;
+  if (facts.level !== null && facts.level < derivedLevel) {
+    throw new Error(
+      `等级声明 Gate: 事实推导等级为 ${derivedLevel}，不能声明更低的 --level ${facts.level}；` +
+      `请改用 level-${derivedLevel}`,
+    );
+  }
+  const microStage = taskModel.changeStages[changeType];
+  if (lightEligible && !microStage) {
+    throw new Error(`changeType ${changeType} 缺少 level-1 Stage`);
   }
   return {
     blockers,
-    changeClass: microChangeEligible ? 'micro' : 'standard',
+    changeClass: lightEligible ? 'micro' : 'standard',
     changeType,
     entry: facts.entry,
-    microChangeEligible,
-    reasonCodes: microChangeEligible
-      ? [`intent:${changeType}`, 'all-micro-change-gates-passed']
-      : [`intent:${changeType}`, 'standard-change-required', ...blockers],
+    lightEligible,
+    reasonCodes: lightEligible
+      ? [`intent:${changeType}`, `level-${declaredLevel}-declared`, 'all-level-1-gates-passed']
+      : [`intent:${changeType}`, `level-${declaredLevel}-required`, ...blockers],
     riskFlags: facts.riskFlags,
-    route: microChangeEligible ? 'micro-change' : 'standard-change',
-    stage: microChangeEligible ? microStage ?? 'capture' : 'capture',
+    route: selectedRoute,
+    stage: declaredLevel <= 1
+      ? microStage ?? 'capture'
+      : Object.keys(config.routes[selectedRoute]?.stages ?? {})[0] ?? 'capture',
   };
 };
 
@@ -316,6 +353,15 @@ const readArguments = (args: string[]): ParsedRouteFacts => {
       index += 1;
       continue;
     }
+    if (argument === '--level') {
+      const value = Number(args[index + 1]);
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error('--level 必须提供非负整数');
+      }
+      facts.level = value;
+      index += 1;
+      continue;
+    }
     if (argument === '--format') {
       const format = args[index + 1];
       if (!format) {
@@ -346,7 +392,7 @@ export const main = (args = process.argv.slice(2)): number => {
         `Entry: ${decision.entry}`,
         `Change Type: ${decision.changeType ?? 'not-applicable'}`,
         `Change Class: ${decision.changeClass ?? 'not-applicable'}`,
-        `Micro Change Eligible: ${decision.microChangeEligible}`,
+        `level-1 Eligible: ${decision.lightEligible}`,
         `Reasons: ${decision.reasonCodes.join(', ')}`,
       ].join('\n');
     process.stdout.write(`${output}\n`);

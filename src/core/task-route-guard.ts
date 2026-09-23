@@ -148,19 +148,22 @@ export const validateRouteTaskState = ({
     );
   }
 
-  if (route === 'standard-change' && taskRequired) {
-    ['source.md', 'intake.md', 'spec.md', 'plan.md'].forEach((fileName) => {
+  const prerequisites = routeConfig.implementationPrerequisites;
+  if (taskRequired && prerequisites) {
+    prerequisites.artifacts.forEach((fileName) => {
       const artifact = artifacts[fileName];
       if (typeof artifact !== 'string' || !artifact.trim()) {
         throw taskGateError(`标准实施前缺少或未填写最小 Spec 包文件 ${fileName}`);
       }
     });
-    const specContent = artifacts['spec.md'];
-    const specStatus = readSpecStatus(typeof specContent === 'string' ? specContent : '');
-    if (specStatus !== 'confirmed') {
-      throw taskGateError(
-        `标准实施前 spec.md status 必须为 confirmed，当前为 ${specStatus || '空'}`,
-      );
+    if (prerequisites.specStatus) {
+      const specContent = artifacts['spec.md'];
+      const specStatus = readSpecStatus(typeof specContent === 'string' ? specContent : '');
+      if (specStatus !== prerequisites.specStatus) {
+        throw taskGateError(
+          `标准实施前 spec.md status 必须为 ${prerequisites.specStatus}，当前为 ${specStatus || '空'}`,
+        );
+      }
     }
   }
 

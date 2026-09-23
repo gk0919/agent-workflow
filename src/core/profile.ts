@@ -78,14 +78,23 @@ export const validateProfileTaskStages = (
     });
   });
 
-  const microRoute = routes.routes['micro-change'];
-  Object.entries(profile.taskModel.microStages).forEach(([changeType, stageName]) => {
-    if (!microRoute?.stages[stageName]) {
-      errors.push(`microStages.${changeType} 指向未知 Stage：micro-change/${stageName}`);
+  Object.entries(profile.taskModel.changeStages).forEach(([changeType, stageName]) => {
+    const owners = Object.entries(routes.routes)
+      .filter(([, route]) => Boolean(route.stagePaths?.[changeType]))
+      .map(([name]) => name);
+    if (owners.length === 0) {
+      errors.push(
+        `changeStages.${changeType} 未绑定任何 Route 的 stagePaths.${changeType}：${stageName}`,
+      );
+      return;
     }
-    if (!microRoute?.stagePaths?.[changeType]?.includes(stageName)) {
-      errors.push(`microStages.${changeType} 未绑定 micro-change.stagePaths.${changeType}`);
-    }
+    owners.forEach((name) => {
+      const route = routes.routes[name];
+      const stagePath = route?.stagePaths?.[changeType] ?? [];
+      if (!stagePath.includes(stageName) || !route?.stages[stageName]) {
+        errors.push(`changeStages.${changeType} 指向未知 Stage：${name}/${stageName}`);
+      }
+    });
   });
   return errors;
 };

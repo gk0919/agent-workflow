@@ -7,7 +7,7 @@
 - Conversation 状态模式默认只在当前对话中输出阶段产物，不主动创建任务文件。
 - 标准流程业务任务生成正式 Spec 是唯一默认落盘例外：立即创建或更新最小 Spec 包
   `manifest.md`、`source.md`、`intake.md`、`spec.md` 和 `verification.json`。
-- Micro Change 只保留对话内 Source Lite 与 Change Brief，不生成正式 Spec，也不创建任务目录；需要落盘或交接时先升级标准流程。
+- level-1 只保留对话内 Source Lite 与 Change Brief，不生成正式 Spec，也不创建任务目录；需要落盘或交接时先升级标准流程。
 - 用户明确要求“落盘”“保存过程”“可追溯记录”时，才在仓库中创建任务目录。
 - 用户明确表示任务可能切换工具、需要异步执行、云端交付或长期交接时，进入 Portable 状态模式并创建任务目录。
 - 不为已跳过的阶段创建空文件；在 `manifest.md` 中记录跳过原因。
@@ -116,7 +116,7 @@ npm run workflow:task -- resume --task <task-id> --action <next-action>
 - Mode: Pair / Async / Runtime
 - State Mode: Conversation / Portable
 - Route:
-- Route ID: `standard-change` / `analysis` / `review-only`
+- Route ID: `level-2` / `task-analysis` / `task-review`
 - Status:
 - Current Stage:
 - Last Executor:
@@ -307,7 +307,7 @@ agent-workflow task handoff-check --task <task-id>
 
 接手任务的执行者必须：
 
-1. 使用 `portable-resume` Packet，只读取 `manifest.md` 的状态小节、`source.md` 摘要、
+1. 使用 `task-portable-resume` Packet，只读取 `manifest.md` 的状态小节、`source.md` 摘要、
    `verification.json` 的目标/未完成 VT 摘要和 `handoff.md` 当前事项。
 2. 只读检查实际仓库状态，确认分支和改动文件与记录一致。
 3. 不重复执行已完成阶段；发现记录与仓库不一致时，以仓库事实为准并更新记录。
@@ -317,7 +317,7 @@ agent-workflow task handoff-check --task <task-id>
 推荐启动提示：
 
 ```md
-请按仓库 `AGENTS.md` 声明的实际 `START.md` 包路径选择 portable-resume，只读取
+请按仓库 `AGENTS.md` 声明的实际 `START.md` 包路径选择 task-portable-resume，只读取
 `.agent-workflow/tasks/local/<task-id>/manifest.md`、业务任务 `source.md` 和 `handoff.md`
 的当前状态摘要。
 先只读核对仓库状态；有 in_progress / blocked 阶段时先处理 Current Stage，
@@ -335,6 +335,8 @@ agent-workflow task handoff-check --task <task-id>
 4. Review 和 Verify 可以形成一份汇总报告，但 Git Report 必须按仓库分节。
 5. stage、commit、push 和 PR 授权按仓库、按动作分别判断。
 6. 使用 worktree 时，在 Worktree Binding 记录逻辑仓库、Binding ID、基线 commit 和 checkout mode；每个仓库一行。
+7. L4 架构级变更额外记录里程碑产物、契约冻结结论、按仓库的落地顺序与回滚点；四项都与 Repository Matrix 的行一一对应。
+8. 跨仓库验证结论必须按仓库标注；未按仓库标注的汇总结论不得作为完成证据。
 
 禁止：
 

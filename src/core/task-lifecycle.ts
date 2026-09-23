@@ -449,6 +449,10 @@ export const transitionManifestContent = (
   const flow = taskFlowFor(model.routeId, config);
   const stageByName = new Map(model.stages.map((item) => [item.name, item]));
   const current = stageByName.get(model.currentStage);
+  // Single source of truth for the gate: `route --stage implement`, `next`,
+  // `advance` and `reopen` all read this route declaration instead of a route name.
+  const implementationApprovalRequired = flow.stages.includes('Implement') &&
+    config.routes[model.routeId]?.implementationApprovalRequired === true;
   if (userApproved && !['advance', 'reopen'].includes(command)) {
     throw new Error(
       'Implementation Approval Gate: --user-approved 只允许用于转入 Implement',
@@ -456,13 +460,14 @@ export const transitionManifestContent = (
   }
 
   if (command === 'reopen') {
-    if (model.schemaVersion !== 2 || model.routeId !== 'standard-change' ||
+    if (model.schemaVersion !== 2 ||
+        config.routes[model.routeId]?.reopenable !== true ||
         !['Review', 'Verify', 'Git Inspect'].includes(model.currentStage) ||
         !['in_progress', 'blocked'].includes(model.status)) throw new Error('reopen 只支持持久标准任务的 Review/Verify/Git Inspect');
     const targetStage = cleanInline(to, 'Reopen stage');
     if (!['Spec', 'Plan', 'Implement', 'Review', 'Verify'].includes(targetStage) ||
         flow.stages.indexOf(targetStage) >= flow.stages.indexOf(model.currentStage)) throw new Error('reopen 必须回到更早的方案、实施或验证阶段');
-    if (targetStage === 'Implement' && !userApproved) throw new Error(
+    if (targetStage === 'Implement' && implementationApprovalRequired && !userApproved) throw new Error(
       continuation
         ? 'Implementation Approval Gate: 批准记录与当前计划一致，但仍需当前会话用户确认继续；确认后追加 --user-approved'
         : 'reopen Implement 需要当前会话用户确认继续实施；确认后追加 --user-approved',
@@ -557,7 +562,7 @@ export const transitionManifestContent = (
     if (!flow.transitions[current.name]?.includes(targetStage)) {
       throw new Error(`${current.name} 不能转换到 ${targetStage}`);
     }
-    if (targetStage === 'Implement' && !userApproved) {
+    if (targetStage === 'Implement' && implementationApprovalRequired && !userApproved) {
       throw new Error(
         continuation
           ? 'Implementation Approval Gate: 批准记录与当前计划一致，但仍需当前会话用户确认继续；' +

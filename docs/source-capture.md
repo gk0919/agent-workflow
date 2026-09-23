@@ -24,7 +24,7 @@ Source Capture 是业务事实入口，某一种 Connector、MCP 或 CLI 不是�
 
 ## Entry Gate
 
-任何业务任务进入 Micro Change、Intake、PRD、Spec、Plan、Implement 或 Review 前，必须完成 Source Capture，并具备：
+任何业务任务进入 level-1、Intake、PRD、Spec、Plan、Implement 或 Review 前，必须完成 Source Capture，并具备：
 
 - Entry Mode：Active Profile 声明的 Direct 或 Provider Entry。
 - Source Type：Active Profile 声明的合法任务类型。
@@ -79,7 +79,7 @@ Direct Entry 直接使用用户当前消息中的需求或缺陷正文：
 1. 不调用 Source Provider、Connector、MCP、CLI、浏览器或同步脚本补全事实。
 2. 保留用户原文，不能把 Agent 的整理结果反写成“原始描述”。
 3. 把后续澄清记录为补充约束，并保留与原文的区别。
-4. 简单、低风险且目标明确时按 Active Profile 的 change type 评估 Micro Change Gate；不满足时进入 Intake (lite)。
+4. 简单、低风险且目标明确时按 Active Profile 的 change type 评估 level-1 Gate；不满足时进入 Intake (lite)。
 5. 缺少目标行为、关键范围或可判断的验收结果时，只询问最少必要问题。
 6. Direct Entry 不具有 Provider 最新状态保证；除非用户要求，不主动核对。
 
@@ -131,9 +131,9 @@ Source Capture 完成后：
 
 1. Pool Entry 把池中原始记录视为事实；Direct Entry 把用户首次粘贴原文视为当前任务来源。
 2. 把后续用户补充标记为补充约束，把 Agent 推断标记为待确认。
-3. 返回 Router，按 Active Profile 的 change type 和 Micro Change Gate 选择 Route。
-4. 不满足 Micro Change 时，Intake 必须引用 Entry Mode、Source Type、Captured At 和 Source Snapshot；Pool Entry 还要引用 SN/ID。
-5. change type 到 Locate Stage 的映射以 Active Profile 的 `microStages` 为准；无法判断时只问一个必要问题。
+3. 返回 Router，按 Active Profile 的 change type 和 level-1 Gate 选择 Route。
+4. 不满足 level-1 时，Intake 必须引用 Entry Mode、Source Type、Captured At 和 Source Snapshot；Pool Entry 还要引用 SN/ID。
+5. change type 到 Locate Stage 的映射以 Active Profile 的 `changeStages` 为准；无法判断时只问一个必要问题。
 6. 存在 UI 图片、业务语义或来源冲突时，先确认再进入 Implement。
 
 ## 通过标准
@@ -144,4 +144,4 @@ Source Capture 完成后：
 - 需求或缺陷来源可追踪。
 - 原始记录、用户补充和推断已分离。
 - 未在无授权情况下刷新或修改本地状态。
-- Portable 任务以及标准流程中已经生成正式 Spec 的业务任务已写入 `source.md` 并更新 `manifest.md`；Micro Change 保留对话内 Source Lite 与 Change Brief。
+- Portable 任务以及标准流程中已经生成正式 Spec 的业务任务已写入 `source.md` 并更新 `manifest.md`；level-1 保留对话内 Source Lite 与 Change Brief。

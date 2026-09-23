@@ -111,9 +111,9 @@ export const main = (): number => {
   assert.equal(crlfUpdated.replaceAll('\r\n', ''), crlfUpdated.replaceAll(/\r?\n/g, ''), 'preserve CRLF line endings');
   const endOfFile = fixture.slice(0, fixture.indexOf('\n## Notes')).trimEnd();
   assert.equal(parseTaskPlan(updateWorkItem(endOfFile, 'T2', { checkpoint: 'Pending dependency' })).items[1]?.checkpoint, 'Pending dependency');
-  const maintenance = fixture.replaceAll('  - Planned Change: C1\n', '').replaceAll(/  - Verify: VT[12]\n/g, '  - Artifact: analysis.md#Findings\n');
+  const maintenance = fixture.replaceAll('  - Planned Change: C1\n', '').replaceAll(/  - Verify: VT[12]\n/g, '  - Artifact: task-analysis.md#Findings\n');
   assert.deepEqual(validateTaskPlan(parseTaskPlan(maintenance)), []);
-  assert.throws(() => parseTaskPlan(maintenance.replaceAll('analysis.md#Findings', '../outside.md')), /safe relative locator/);
+  assert.throws(() => parseTaskPlan(maintenance.replaceAll('task-analysis.md#Findings', '../outside.md')), /safe relative locator/);
   const deferred = `${fixture}\n## Deferred Work Items\n\n- [ ] T3: Broader migration\n  - Stage: Implement\n  - Done When: Legacy tasks are migrated\n  - Artifact: follow-up.md\n  - Deferred Reason: Separate accepted scope\n`;
   assert.equal(parseTaskPlan(deferred).items[2]?.deferredReason, 'Separate accepted scope');
   assert.throws(() => parseTaskPlan(deferred.replace('  - Deferred Reason: Separate accepted scope\n', '')), /Deferred Reason/);

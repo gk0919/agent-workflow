@@ -7,7 +7,7 @@
 ## 执行方式
 
 - `.cursor/rules/ai-workflow.mdc` 只负责自动指向 setup 解析出的实际 `START.md` 包路径。
-- Portable 业务任务先用 `portable-resume` 读取 manifest/source/handoff 当前摘要；Cursor 的内部计划不是跨工具状态。
+- Portable 业务任务先用 `task-portable-resume` 读取 manifest/source/handoff 当前摘要；Cursor 的内部计划不是跨工具状态。
 - 大任务先生成 Plan，再进入实现。
 - 使用 Rules 管理稳定约束，避免把长文档全部 always apply。
 - 修改后按 `agent-workflow/docs/06-review.md` 和 `agent-workflow/docs/07-verify.md` 输出结果。

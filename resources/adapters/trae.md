@@ -20,7 +20,7 @@
 
 ## Portable Handoff
 
-- 接手业务任务前用 `portable-resume` 读取 manifest/source/handoff 当前摘要，再核对仓库状态。
+- 接手业务任务前用 `task-portable-resume` 读取 manifest/source/handoff 当前摘要，再核对仓库状态。
 - TRAE 的会话历史、内部计划、检查点或记忆不能替代标准阶段产物。
 - 离开 TRAE 前更新当前阶段、下一动作、改动文件、Review、Verify 和未授权 Git 动作。
 

@@ -116,7 +116,7 @@ export const main = (): number => {
       ['setup', '--agent', 'all', '--check'],
       ['profile', '--check'],
       ['context'],
-      ['route', '--route', 'analysis', '--stage', 'capture', '--entry', 'direct', '--materialize'],
+      ['route', '--route', 'task-analysis', '--stage', 'capture', '--entry', 'direct', '--materialize'],
     ]) {
       const result = runCli(hostRoot, args);
       assert.equal(result.status, 0, `${args.join(' ')}\n${result.stderr || result.stdout}`);

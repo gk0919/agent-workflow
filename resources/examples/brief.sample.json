@@ -4,7 +4,7 @@
     "goals": [
       {
         "id": "G1",
-        "text": "用一句话描述本次 Micro Change 的目标结果"
+        "text": "用一句话描述本次 level-1 的目标结果"
       }
     ],
     "acceptanceCriteria": [

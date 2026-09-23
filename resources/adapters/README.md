@@ -9,16 +9,19 @@
 1. 新宿主先由 `agent-workflow init` 生成根入口和 Host 契约；所有任务只启动 `AGENTS.md` 及其中实际 `START.md` / `ROUTER.md` 包路径。
 2. 使用 `workflow:route` 选择 Route/Stage/Entry，优先 `--materialize` 合并当前阶段卡
    和命中 Skill；超限时按 Packet 白名单读取。
-3. 复用 Packet 输出的匿名 Run ID；Micro Change 重复提交结构化 Gate 事实，并从 Review 起
+3. 复用 Packet 输出的匿名 Run ID；level-1 重复提交结构化 Gate 事实，并从 Review 起
    提交任务专属 unified diff 做实际范围门禁。
 4. 阶段切换时重新生成 Packet，不累计阶段手册。
 5. 完整 `README.md`、Source Capture、项目策略、Adapter 和 Reference 只在当前卡明确要求时读取。
-6. Portable 任务先使用 `portable-resume`，读取状态摘要后切换实际路由。
+6. Portable 任务先使用 `task-portable-resume`，读取状态摘要后切换实际路由。
 
 `agent-workflow setup` 只安装工具薄入口；如果工具不能自动发现仓库规则，运行
 `agent-workflow setup --agent generic` 输出与安装位置一致的启动提示。
 
 工作流维护、工具配置和纯 Git 操作使用独立 Route，不加载业务 Source，也不伪造 Source Snapshot。
+
+L4 `level-4` 不得在无人值守、后台或异步模式下自行完成：架构决策必须回到当前会话取得用户批准。
+多仓库阶段、commit、push 与 PR 授权按仓库、按动作分别判断；禁止把一个仓库的授权沿用到另一个仓库。
 
 ## 允许包含
 
@@ -57,7 +60,7 @@ Route 调用日志只能保存匿名化结构字段；Adapter 不得附加用户
 
 项目 Skill 的唯一事实源是 `.agents/skills/`。工具原生 Skill 目录如需兼容，只能保存指向该目录的薄桥接，不得复制完整 `SKILL.md` 或 references。
 
-所有具备文件写入能力的工具在标准流程生成正式业务 Spec 后，都必须执行 `agent-workflow/docs/03-spec.md` 的自动落盘协议。Micro Change 不生成正式 Spec。工具不能写文件时，应输出完整的目标路径和可直接保存的文件内容，并明确标记“未落盘”。
+所有具备文件写入能力的工具在标准流程生成正式业务 Spec 后，都必须执行 `agent-workflow/docs/03-spec.md` 的自动落盘协议。level-1 不生成正式 Spec。工具不能写文件时，应输出完整的目标路径和可直接保存的文件内容，并明确标记“未落盘”。
 
 ## 适配器模板
 
@@ -98,5 +101,5 @@ Route 调用日志只能保存匿名化结构字段；Adapter 不得附加用户
 - 是否为不可用能力提供降级路径。
 - 是否能读取 Portable 任务，并优先处理 `Current Stage` 的 `in_progress` / `blocked` 阶段，否则从第一个 `pending` 阶段继续。
 - 是否正确区分 Pool Entry 和 Direct Entry；只有 Pool Entry 无法取得详情时才停在 `blocked-at-entry`。
-- 是否正确区分 Micro Change Brief 与正式业务 Spec，并只为后者保存最小追踪包。
+- 是否正确区分 Brief 与正式业务 Spec，并只为后者保存最小追踪包。
 - 是否没有放宽项目规则和用户授权。

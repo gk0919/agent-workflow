@@ -60,8 +60,10 @@ interface BriefFileOptions extends BriefValidationOptions {
 
 export const MICRO_BRIEF_STAGES = new Set([
   'implement',
+  'review-cosmetic',
   'review-defect',
   'review-requirement',
+  'verify-cosmetic',
   'verify-defect',
   'verify-requirement',
   'git-inspect',
@@ -248,19 +250,19 @@ export const validateMicroBrief = (
 ): string[] => {
   const errors: string[] = [];
   if (!MICRO_BRIEF_STAGES.has(stage)) {
-    return [`Micro Brief 不接受阶段 ${stage}`];
+    return [`Brief 不接受阶段 ${stage}`];
   }
   if (!exactKeys(
     brief,
     ['changeInventory', 'goalAlignment', 'verificationMatrix', 'version'],
-    'Micro Brief',
+    'Brief',
     errors,
   )) {
     return errors;
   }
   const briefRecord = brief;
   if (briefRecord.version !== 1) {
-    errors.push('Micro Brief version 必须为 1');
+    errors.push('Brief version 必须为 1');
   }
   if (!exactKeys(
     briefRecord.goalAlignment,
@@ -412,23 +414,23 @@ export const guardMicroBriefContent = ({
   stage,
 }: BriefGuardOptions): MicroBriefSummary & { briefHash: string } => {
   if (typeof content !== 'string') {
-    throw new Error('Micro Brief Gate: 内容必须是 UTF-8 JSON 文本');
+    throw new Error('Brief Gate: 内容必须是 UTF-8 JSON 文本');
   }
   if (containsSensitiveData(content)) {
-    throw new Error('Micro Brief Gate: 文件包含疑似凭据或敏感参数');
+    throw new Error('Brief Gate: 文件包含疑似凭据或敏感参数');
   }
   let brief: unknown;
   try {
     brief = JSON.parse(content);
   } catch (error: unknown) {
-    throw new Error(`Micro Brief Gate: JSON 无法解析（${errorMessage(error)}）`);
+    throw new Error(`Brief Gate: JSON 无法解析（${errorMessage(error)}）`);
   }
   const errors = validateMicroBrief(brief, stage, {
     patchFiles,
     repository,
   });
   if (errors.length > 0) {
-    throw new Error(`Micro Brief Gate: ${errors[0]}`);
+    throw new Error(`Brief Gate: ${errors[0]}`);
   }
   const typedBrief = brief as MicroBrief;
   return {
@@ -450,7 +452,7 @@ export const guardMicroBriefFile = ({
 }: BriefFileOptions): MicroBriefSummary & { briefHash: string } => {
   const { content } = readWorkflowInputFile(briefFile, {
     allowedPrefix: `${workflowRelativePath('runtimeRoot', 'briefs')}/`,
-    label: 'Micro Brief 文件',
+    label: 'Brief 文件',
     maxBytes: MAX_BRIEF_BYTES,
   });
   return guardMicroBriefContent({

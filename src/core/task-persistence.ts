@@ -92,7 +92,9 @@ export const persistentExitGate = (directory: string, command: TaskTransitionCom
   if (model.currentStage === 'Review' && !readTaskFile(directory, 'review.md').trim()) throw new Error('Review report is empty');
   if (model.currentStage === 'Verify' || command === 'complete') {
     const contract = contractFor(directory);
-    if (model.routeId === 'standard-change' && (!contract || contract.contractStatus !== 'verified')) throw new Error('Verify requires a verified contract; retain blocked or conditional results');
+    const routeGates = loadRoutes().routes[model.routeId];
+    if (routeGates?.verifiedContractRequired === true &&
+        (!contract || contract.contractStatus !== 'verified')) throw new Error('Verify requires a verified contract; retain blocked or conditional results');
     if (contract) {
       if (contract.schemaVersion !== 2 &&
           (contract.testPoints as unknown[]).filter(isJsonObject).some((point) => point.status === 'passed')) {
@@ -161,10 +163,10 @@ export const runPersistentCommand = (command: string, args: string[], taskId: st
   const directory = taskPath(taskId);
   if (command === 'init') {
     if (existsSync(directory)) throw new Error(`Task already exists: ${taskId}`);
-    const routeId = arg('--route') || 'standard-change';
+    const routeId = arg('--route') || 'level-2';
     const route = loadRoutes().routes[routeId];
     if (!route?.taskFlow) throw new Error('Route does not support persistent tasks yet');
-    const entry = arg('--entry') || (routeId === 'workflow-maintenance' ? 'not-applicable' : 'direct');
+    const entry = arg('--entry') || (routeId === 'task-workflow-maintenance' ? 'not-applicable' : 'direct');
     if (!route.entryModes.includes(entry)) throw new Error('Entry does not belong to route');
     const goal = inline(arg('--goal'), 'Goal');
     const repository = inline(arg('--repository') || '.', 'Repository');
@@ -283,7 +285,9 @@ export const runPersistentCommand = (command: string, args: string[], taskId: st
       });
       const updated = parseTaskPlan(next, taskId).items.find((entry) => entry.id === id)!;
       if (status === 'complete') verifyItemEvidence(directory, updated);
-      if (status === 'active' && model.routeId === 'standard-change' && model.currentStage === 'Implement') {
+      if (status === 'active' &&
+          loadRoutes().routes[model.routeId]?.workItemApprovalRequired === true &&
+          model.currentStage === 'Implement') {
         if (!hasTaskApproval(directory, previous)) throw new Error('Implementation approval is missing or no longer matches the plan');
         if (!args.includes('--user-approved')) throw new Error('激活工作项仍需当前会话用户确认继续实施；确认后追加 --user-approved');
       }

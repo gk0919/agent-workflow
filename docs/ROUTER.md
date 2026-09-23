@@ -1,12 +1,12 @@
 # Runtime Router
 
-只用本页完成首次分流；详细说明按 Route Packet 延迟加载。
+只用本页完成首次分流；运行细节与规则见 [`routing-runtime.md`](./routing-runtime.md)，按需加载。
 
 ## Entry
 
 - 用户要求查询、展开、选择或刷新项目 Provider 中的事项：使用 Active Profile 的 Provider Entry（默认名为 `pool`）；调用 Route Packet 声明的 Source Provider，未明确要求时不得刷新。
 - 用户直接提供自包含需求或缺陷：`direct`；不得调用缺陷池补全。
-- 用户要求生成候选知识、检查候选知识或确认候选可晋升：`not-applicable`；路由到 `workflow-maintenance`，不调用缺陷池。
+- 用户要求生成候选知识、检查候选知识或确认候选可晋升：`not-applicable`；路由到 `task-workflow-maintenance`，不调用缺陷池。
 - 工作流维护、工具配置、纯 Git：`not-applicable`。
 
 业务事实先形成 Source Lite：来源、目标/现象、期望结果、明确限制；Pool 另记录 SN/ID 和捕获时间。缺少关键事实时只问一个必要问题。
@@ -15,64 +15,37 @@
 
 | 条件 | Route / First Stage |
 |---|---|
-| 只查询或选择池事项 | `pool-capture / capture` |
-| 明确低风险微变更，满足通用 Gate；缺陷恢复既有行为 | `micro-change / locate-defect` |
-| 明确低风险微变更，满足通用 Gate，且需求复用现有模式、不新增业务状态、兼容策略明确 | `micro-change / locate-requirement` |
-| 业务修改但不满足 Micro Change | `standard-change / capture` |
-| 只分析或定位 | `analysis / capture` |
-| 只评审 | `review-only / capture` |
-| 工作流或工具维护 | `workflow-maintenance / inspect` |
-| 纯 Git | `git-only / inspect` |
-| 恢复已有 Portable 任务 | `portable-resume / resume` |
+| 只查询或选择池事项 | `task-pool-capture / capture` |
+| 纯外观改动 | `level-0 / locate-cosmetic` |
+| 明确低风险微变更，满足通用 Gate；缺陷恢复既有行为 | `level-1 / locate-defect` |
+| 明确低风险微变更，满足通用 Gate，且需求复用现有模式、不新增业务状态、兼容策略明确 | `level-1 / locate-requirement` |
+| 业务修改，单模块（`modules ≤ 1`）且无跨模块风险 | `level-2 / capture` |
+| 跨模块（`modules ≥ 2`）或命中 `state-refactor` / `performance-program` | `level-3 / capture` |
+| 跨模块或跨仓库的架构级公共契约、数据模型、权限边界、异步生命周期或迁移发布变化 | `level-4 / capture` |
+| 只分析或定位 | `task-analysis / capture` |
+| 只评审 | `task-review / capture` |
+| 工作流或工具维护 | `task-workflow-maintenance / inspect` |
+| 纯 Git | `task-git / inspect` |
+| 恢复已有 Portable 任务 | `task-portable-resume / resume` |
 | 用户要求交接、换会话或切工具 | `task-handoff / prepare` |
 
-Micro Change 数量阈值以 `routes.json` 的 `microChangeGate` 为唯一事实源；目标、验收、唯一落点和验证入口必须明确，且无接口、数据、权限、公共链路、异步生命周期、高风险、迁移、发布协同或外部写入。截图、样式或业务语义有歧义时不得进入。执行中范围扩大时先升级 `standard-change`。
+等级即入口：`--level <0-4>` 选中 `level-N`，`--route` 可选且同时给出时必须一致；五个等级都要求
+`--intent` 与完整 Gate 事实，阈值以 `routes.json` 为唯一事实源。事实是下限：声明低于事实推导等级
+会被拒绝并给出应改用的 `level-N`，声明更高则按更严流程执行。
+
+目标、验收、唯一落点和验证入口必须明确，且无接口、数据、权限、公共链路、异步生命周期、高风险、
+迁移、发布协同或外部写入。截图、样式或业务语义有歧义时不得进入。执行中范围扩大时先升级 `level-2`。
+L4 也可由 `--intent architecture` 进入。
 
 ## Runtime
 
-“我要换会话，帮我交接当前任务”对应 `agent-workflow task prepare`；“继续上次任务”对应 `agent-workflow task continue`。
-这是 Agent 内部入口：自动选择任务、推导 Entry、加载对应 Skill 和摘要。会话或用户明确指定任务时附 `--task`，选定后所有写入和后续命令固定使用该 ID。
-无明确 ID 时按 manifest Last Updated 与有效交接记录的生成时间选择最近未完成任务，不使用文件修改时间；并列时仅询问任务选择。
-找不到本地任务但当前会话有完整任务事实时，按原路由的产物约定建立任务记录，不要求用户填写文件或编造事实；确实缺少目标时才询问。
-
-运行：
-
 ```text
-npm run workflow:classify -- --intent <intent> \
-  [--change-type defect|requirement] --entry <entry> [fact flags]
-npm run workflow:next -- --task <task-id> \
-  [--skill <name>] [--reference <path>] [--risk <flag>] [--repository <path>] \
-  [--format text|json] [--materialize] [--user-approved]
-npm run workflow:route -- --route <route> --stage <stage> --entry <entry> \
-  [--intent <intent> <fact flags>] [--skill <name>] [--reference <path>] \
-  [--run-id <id> | --parent-run-id <id>] \
-  [--micro-brief-file .agent-workflow/runtime/briefs/<name>.json] \
-  [--micro-patch-stdin | --micro-patch-file .agent-workflow/runtime/patches/<name>.patch] \
-  [--repository <relative-repository>] [--user-approved]
+npm run workflow:classify -- --intent <intent> [--change-type defect|requirement|cosmetic] --entry <entry> [fact flags]
+npm run workflow:next -- --task <task-id> [--materialize] [--user-approved]
+npm run workflow:route -- --level <0-4> [--route <route>] --stage <stage> --entry <entry> \
+  --intent <intent> <fact flags> [--brief-file <path>] [--patch-file <path> | --patch-stdin] \
+  [--repository <relative-repository>] [--run-id <id> | --parent-run-id <id>] [--materialize]
 ```
 
-`workflow:classify` 只预览结构化事实；`workflow:route` 会复核。Micro 缺完整 facts 时拒绝，
-`--repository` 在 Locate 是可选提示、Implement 若传则匹配 Brief、Review 起强制绑定 patch；
-Review 同时验证 Brief 文件、仓库和 patch。Windows 优先用 `--micro-patch-file` 和 Git
-`diff --output=<file>`，避免 PowerShell 管道；实际超 Gate 或来源绑定失败即升级。
-Micro 和 Standard 进入 Implement 前必须先输出原因/依据、修改点和验证项并结束回合；只有用户
-在当前会话明确批准后才可追加 `--user-approved`。缺少批准或在其他阶段使用该参数均被拒绝。
-持久任务在同一已批准计划上恢复时不必重新展示完整 Implementation Review，但进入 Implement
-和激活工作项仍必须由当前会话用户确认：`advance`、`reopen --to Implement`、`next`、
-`route --stage implement` 与 `task item --status active` 都要求 `--user-approved`；
-任务记录中的批准只用于判断计划与范围是否仍然适用
-（见 [`12-artifacts.md#持久任务persistent`](./12-artifacts.md#持久任务persistent)）。
-Packet 自动生成 Run ID；同 Route 后续阶段复用该 ID，切 Route 时在新 Route 首阶段改用
-`--parent-run-id <old-run>` 创建关联的新 Run。运行日志会校验阶段顺序、Route 归属、Brief
-计划哈希和匿名来源哈希；
-其他 Route 可人工分流，但决策标为 `manual-route-selection`。
-交接是临时操作路由，不改变目标任务的 manifest Route；路由不传 `--task`，随后交接命令传目标任务 ID。
-task-handoff 和 portable-resume 按阶段能力从 Profile 的 `capabilitySkills` 加载 Skill，并计入预算；具体 Skill 定位符不写入 Core。
-加载深度 Reference 时重新运行 Route 并追加 `--reference`；只有当前阶段白名单允许，
-且 Reference 会重新计入上下文预算。长文档使用 `path#heading` 章节选择器，禁止为了读取
-一个规则把整份维护手册加入上下文。
-
-命中明确风险时追加 `--risk <flag>`；Micro Change 遇到禁止风险会确定性拒绝并给出升级动作。
-优先使用 `--materialize`；超限时完整物化可容纳的优先项并列出剩余。三份基础文档不会重复输出。
-
-只加载输出白名单；`README.md`、`source-capture.md`、Active Profile 的项目策略、`micro-change.md` 和完整 Reference 默认禁止启动时读取。阶段切换后丢弃上一阶段的流程细节，仅保留任务事实、决策、diff 和未完成项。
+只加载输出白名单；`README.md`、`source-capture.md`、Active Profile 的项目策略、`level-1.md` 和完整
+Reference 默认禁止启动时读取。阶段切换后丢弃上一阶段的流程细节，仅保留任务事实、决策、diff 和未完成项。

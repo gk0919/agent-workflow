@@ -42,7 +42,7 @@ Verify 的目标是记录真实验证情况，而不是只写“已测试”。
 
 ## Targeted 配置
 
-`Verify (targeted)` 用于 Micro Change：
+`Verify (targeted)` 用于 level-1：
 
 - 只验证任务 patch 和目标文件，不用全仓库噪声代替证据。
 - JavaScript 至少执行语法检查和 `agent-workflow quality:js --file <path>`；目标文件已有其他语义改动时使用任务专属 patch 的 `--patch-stdin` 模式。

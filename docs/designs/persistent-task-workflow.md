@@ -43,7 +43,7 @@
 | Micro | [路由定义](../../resources/routes.json) 有意图相关 stagePaths，但无 taskFlow；Brief 只允许放入 runtime/briefs | 需要任务化和持久化输入，不能仅复用现有 next |
 | 阶段恢复 | [next](../../src/core/workflow-next.ts) 从 manifest 当前阶段推导 Packet；blocked 时拒绝 | 扩展为先诊断再返回允许动作，仍不自动推进阶段 |
 | 运行连续性 | [route](../../src/core/route.ts) 从最近 90 天、匹配 routesVersion 的 runtime 事件校验 Run | 必需的连续性记录不能依赖可清理日志 |
-| 实施中的增量状态 | [Micro Brief 校验](../../src/core/micro-brief.ts) 要求 Implement 中实际改动和证据为空 | 必须区分首次进入实施与恢复实施，允许真实进度增量保存 |
+| 实施中的增量状态 | [Brief 校验](../../src/core/micro-brief.ts) 要求 Implement 中实际改动和证据为空 | 必须区分首次进入实施与恢复实施，允许真实进度增量保存 |
 | 交接摘要 | [摘要收集](../../src/core/task-handoff.ts) 主要读取 manifest、notes、契约和部分 source，没有直接覆盖 spec/plan/review | 常驻产物必须成为恢复的直接输入 |
 | 并发保护 | [状态更新](../../src/core/task-state.ts) 已有锁、预期时间戳和单文件原子替换 | 可复用，但不能误称已保证跨文件事务 |
 

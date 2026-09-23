@@ -17,7 +17,7 @@ export interface RouteEvalCase {
     blocker?: string;
     changeType?: string;
     error?: string;
-    microChangeEligible?: boolean;
+    lightEligible?: boolean;
     route?: string;
     stage?: string;
   };
@@ -38,9 +38,16 @@ export const casesPath = resolveWorkflowLocator(
   'evals.routeCases',
 );
 
+const evalRoutes = loadRoutes();
+// Risk cases model an ordinary micro-style change, so they must not borrow a
+// change type whose Route demands an explicit `--level` declaration.
+const baseChangeType = activeProfile.taskModel.changeTypes.find((changeType) =>
+  Object.values(evalRoutes.routes).some((route) =>
+    route.stagePaths?.[changeType] !== undefined && route.requiredLevel === undefined));
+
 const baseMicroChangeFacts = {
   acceptanceClear: true,
-  changeType: activeProfile.taskModel.changeTypes[0] ?? '',
+  changeType: baseChangeType ?? activeProfile.taskModel.changeTypes[0] ?? '',
   entry: activeProfile.taskModel.changeEntryModes[0] ?? '',
   files: 1,
   goalClear: true,
@@ -56,8 +63,8 @@ export const materializeRouteCase = (testCase: RouteEvalCase): RouteEvalCase => 
     ...testCase,
     expected: {
       blocker: `risk:${testCase.risk}`,
-      route: 'standard-change',
-      stage: 'capture',
+      route: testCase.expected?.route ?? 'level-2',
+      stage: testCase.expected?.stage ?? 'capture',
     },
     facts: {
       ...baseMicroChangeFacts,
@@ -98,11 +105,11 @@ export const main = (): number => {
       const decision = classifyRouteFacts(testCase.facts, config, activeProfile);
       assert.equal(decision.route, testCase.expected.route, `${testCase.id}: route`);
       assert.equal(decision.stage, testCase.expected.stage, `${testCase.id}: stage`);
-      if (typeof testCase.expected.microChangeEligible === 'boolean') {
+      if (typeof testCase.expected.lightEligible === 'boolean') {
         assert.equal(
-          decision.microChangeEligible,
-          testCase.expected.microChangeEligible,
-          `${testCase.id}: microChangeEligible`,
+          decision.lightEligible,
+          testCase.expected.lightEligible,
+          `${testCase.id}: lightEligible`,
         );
       }
       if (testCase.expected.changeType) {
@@ -121,15 +128,21 @@ export const main = (): number => {
       routeCounts.set(decision.route, (routeCounts.get(decision.route) || 0) + 1);
     });
 
-    ['micro-change', 'standard-change', 'analysis', 'review-only']
+    const classifiedRoutes = Object.entries(config.routes)
+      .filter(([, route]) =>
+        route.manualSelectionOnly !== true &&
+        (route.stagePaths || route.implementationPrerequisites))
+      .map(([name]) => name);
+    [...classifiedRoutes, 'task-analysis', 'task-review']
       .forEach((route) =>
         assert.ok(routeCounts.has(route), `Eval 缺少 ${route} 用例`));
     config.riskCatalog.forEach((riskFlag) =>
       assert.ok(coveredRisks.has(riskFlag), `Eval 缺少风险用例 ${riskFlag}`));
     process.stdout.write(
       `结构化事实路由 Eval 通过：${suite.cases.length} 个用例，` +
-      `${routeCounts.get('micro-change')} 个 Micro Change 正例，` +
-      `${routeCounts.get('standard-change')} 个升级反例。\n`,
+      `${routeCounts.get('level-1')} 个 level-1 正例，` +
+      `${routeCounts.get('level-0') || 0} 个 L0 正例，` +
+      `${routeCounts.get('level-2')} 个升级反例。\n`,
     );
     return 0;
   } catch (error: unknown) {

@@ -27,7 +27,7 @@ Review 检查实现质量。实现者先自审，支持时独立审查。
 
 | 模式 | 适用场景 | 要求 |
 |------|----------|------|
-| Focused Review | Micro Change | 审查任务 patch、根因/验收、兼容、升级条件和目标静态检查 |
+| Focused Review | level-1 | 审查任务 patch、根因/验收、兼容、升级条件和目标静态检查 |
 | Self Review | 小改动、无 subagent | 实现者按清单自审并记录 |
 | Independent Review | 中高风险改动 | 独立执行者审查 |
 | PR Review | 异步任务 | 以 diff、测试和 CI 为中心 |
@@ -61,7 +61,7 @@ Review 检查实现质量。实现者先自审，支持时独立审查。
 - P2 需要修复，或说明暂缓原因。
 - 未验证项必须进入 Verify Report。
 - 缺少 Goal / AC、Actual Change 或 Test Point 的任务不能以“Review 通过”掩盖追踪缺口。
-- Focused Review 发现接口、数据、权限模型、公共链路、异步生命周期、新业务状态、新交互模式或影响范围扩大时，必须退出 Micro Change 并升级完整 Review。
+- Focused Review 发现接口、数据、权限模型、公共链路、异步生命周期、新业务状态、新交互模式或影响范围扩大时，必须退出 level-1 并升级完整 Review。
 
 ## Agent 产物特别检查
 

@@ -40,7 +40,7 @@ export const main = (): number => {
 - Schema Version: 1
 - Task ID: ${taskId}
 - Run ID: run-1234567890abcdef
-- Route ID: workflow-maintenance
+- Route ID: task-workflow-maintenance
 - Status: in_progress
 - Current Stage: Inspect
 - State Mode: Portable
@@ -137,14 +137,14 @@ Read the scope, inspect tracked.txt in workspace, expect baseline content; stop 
     writeFileSync(path.join(directory, 'handoff-notes.md'), notes);
     const packet = JSON.parse(run(['route', '--route', 'task-handoff', '--stage', 'prepare', '--entry', 'not-applicable', '--format', 'json', '--no-log'])) as { skillDocs: string[] };
     assert.equal(packet.skillDocs.length, 1);
-    const resumePacket = JSON.parse(run(['route', '--route', 'portable-resume', '--stage', 'resume', '--entry', 'not-applicable', '--format', 'json', '--no-log'])) as { skillDocs: string[] };
+    const resumePacket = JSON.parse(run(['route', '--route', 'task-portable-resume', '--stage', 'resume', '--entry', 'not-applicable', '--format', 'json', '--no-log'])) as { skillDocs: string[] };
     assert.deepEqual(resumePacket.skillDocs, packet.skillDocs);
     run(['task', 'handoff', '--task', taskId]);
     run(['task', 'handoff-check', '--task', taskId]);
     run(['task', 'handoff-check']);
     run(['task', 'handoff']);
     const continueOutput = run(['task', 'continue']);
-    assert.match(continueOutput, /portable-resume\/resume/);
+    assert.match(continueOutput, /task-portable-resume\/resume/);
     assert.equal(readFileSync(path.join(directory, 'manifest.md'), 'utf8'), manifest);
     const generated = readFileSync(path.join(directory, 'handoff.md'), 'utf8');
     assert.match(generated, /Preserve full evidence/);
@@ -164,7 +164,7 @@ Read the scope, inspect tracked.txt in workspace, expect baseline content; stop 
     const standalone = JSON.parse(readFileSync(path.join(workflowRoot, 'resources/profiles/default/profile.json'), 'utf8')) as Record<string, unknown>;
     delete standalone.capabilitySkills;
     writeFileSync(profilePath, JSON.stringify(standalone));
-    const inherited = JSON.parse(run(['route', '--route', 'portable-resume', '--stage', 'resume', '--entry', 'not-applicable', '--format', 'json', '--no-log'])) as { skillDocs: string[] };
+    const inherited = JSON.parse(run(['route', '--route', 'task-portable-resume', '--stage', 'resume', '--entry', 'not-applicable', '--format', 'json', '--no-log'])) as { skillDocs: string[] };
     assert.deepEqual(inherited.skillDocs, packet.skillDocs);
     writeFileSync(profilePath, JSON.stringify(profile));
     writeFileSync(path.join(root, 'untracked.bin'), Buffer.from([0, 255, 1]));

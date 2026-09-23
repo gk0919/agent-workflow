@@ -76,7 +76,7 @@ export const main = (): number => {
       result: 'success',
       resultKind: 'allowed',
       riskFlags: [],
-      route: 'micro-change',
+      route: 'level-1',
       routesVersion: excludedRoutesVersion,
       skills: ['project-review'],
       stage: 'review',
@@ -90,7 +90,7 @@ export const main = (): number => {
       result: 'error',
       resultKind: 'blocked',
       riskFlags: ['interface-change'],
-      route: 'micro-change',
+      route: 'level-1',
       stage: 'locate-defect',
       timestamp: now,
     }, { logsRoot });
@@ -100,7 +100,7 @@ export const main = (): number => {
       implementationApproved: true,
       outcome: 'in-progress',
       result: 'success',
-      route: 'standard-change',
+      route: 'level-2',
       runId: 'run-0123456789abcdef',
       stage: 'Implement',
       timestamp: now,
@@ -113,7 +113,7 @@ export const main = (): number => {
       outcome: 'complete',
       parentRunId: 'run-fedcba9876543210',
       result: 'success',
-      route: 'standard-change',
+      route: 'level-2',
       runId: 'run-0123456789abcdef',
       secret: 'must-not-be-logged',
       stage: 'Git Inspect',
@@ -149,7 +149,7 @@ export const main = (): number => {
       microSourceHash: 'abcdef0123456789',
       parentRunId: 'run-fedcba9876543210',
       result: 'success',
-      route: 'micro-change',
+      route: 'level-1',
       secret: 'must-not-be-logged',
     });
     assert.equal('secret' in normalized, false);
@@ -215,7 +215,7 @@ export const main = (): number => {
       'implementation-approval-gate',
     );
     assert.equal(
-      classifyRouteError(new Error('Micro Change Run Gate: missing stage')),
+      classifyRouteError(new Error('Change Run Gate: missing stage')),
       'micro-run-gate',
     );
     assert.equal(
@@ -223,11 +223,11 @@ export const main = (): number => {
       'run-route-gate',
     );
     assert.equal(
-      classifyRouteError(new Error('Micro Brief Gate: missing brief')),
+      classifyRouteError(new Error('Brief Gate: missing brief')),
       'micro-brief-gate',
     );
     assert.equal(
-      classifyRouteError(new Error('Micro Change Source Gate: patch mismatch')),
+      classifyRouteError(new Error('level-1 Source Gate: patch mismatch')),
       'micro-source-gate',
     );
     assert.equal(

@@ -119,10 +119,10 @@ Verify Report 按契约生成以下结果桶：
 
 每项保留 VT ID、对应 AC、状态和证据。最终结论不能高于未完成 Test Point 所允许的状态。
 
-## Micro Change
+## level-1
 
-Micro Change 不创建任务目录；机器可校验的 Change Brief 使用
-[`micro-change-brief.sample.json`](../resources/examples/micro-change-brief.sample.json) 作为唯一
+level-1 不创建任务目录；机器可校验的 Change Brief 使用
+[`brief.sample.json`](../resources/examples/brief.sample.json) 作为唯一
 字段模板，工作副本放在忽略目录 `.agent-workflow/runtime/briefs/`。契约必须保持
 `G -> AC -> C` 和 `AC -> VT` 全覆盖；ID、允许字段、Method / Executor 组合和状态枚举由
 `micro-brief.ts` 确定性校验。
@@ -130,4 +130,4 @@ Micro Change 不创建任务目录；机器可校验的 Change Brief 使用
 Implement 锁定 Goal、AC、OOS、Planned Change 和 VT 计划；Focused Review 起填写
 Actual Change，并要求 Repository / File 与实际 patch 完全一致；Git Inspect 前所有 VT
 必须离开 `planned` 且填写 Evidence / Gap。同一 Run 的计划哈希不得漂移，执行状态与证据可随
-阶段更新。若目标、文件、测试点或验证主体无法明确，或者需要持久化契约，升级 Standard Change。
+阶段更新。若目标、文件、测试点或验证主体无法明确，或者需要持久化契约，升级 level-2。

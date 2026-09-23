@@ -46,7 +46,7 @@ export interface TaskModel {
   intakeStage: string;
   intentRoutes: Record<string, [string, string] | null>;
   knownStages: string[];
-  microStages: Record<string, string>;
+  changeStages: Record<string, string>;
   providerEntryMode: string;
   sourceCaptureStage: string;
   sourceTypes: string[];
@@ -100,18 +100,40 @@ export interface RouteStage {
   taskStages?: string[];
 }
 
+/** Implement 前的任务产物门禁；由 routes.json 声明，不绑定具体业务 Route。 */
+export interface RouteImplementationPrerequisites {
+  artifacts: string[];
+  specStatus?: string;
+}
+
+/**
+ * Route 自行声明的流程严格度。Core 只解释这些字段，不再按 Route 名称硬编码门禁，
+ * 新增 Route 时严格度随配置生效，不会静默失效。
+ */
 export interface RouteDefinition {
   budgetChars: number;
   disallowedRiskFlags: string[];
   entryModes: string[];
+  escalationMinModules?: number;
+  escalationRiskFlags?: string[];
+  factClassificationRequired?: boolean;
+  implementationApprovalRequired?: boolean;
+  implementationPrerequisites?: RouteImplementationPrerequisites;
   onFailure: string;
+  /** 只能由显式 --route 选择，不参与结构化事实分类与意图路由。 */
+  manualSelectionOnly?: boolean;
+  patchLogRequired?: boolean;
   reasonCodes: string[];
   references?: string[];
+  reopenable?: boolean;
+  requiredLevel?: number;
   skillReserveChars: number;
   stagePaths?: Record<string, string[]>;
   stages: Record<string, RouteStage>;
   taskFlow?: RouteTaskFlow;
   taskRequiredStages?: string[];
+  verifiedContractRequired?: boolean;
+  workItemApprovalRequired?: boolean;
 }
 
 export interface RoutesConfig {
@@ -125,7 +147,7 @@ export interface RoutesConfig {
     routeWarningRemainingRatio: number;
     toolOutputDefaultChars: number;
   };
-  microChangeGate: {
+  changeGate: {
     maxFiles: number;
     maxSemanticLines: number;
     minFiles: number;
@@ -152,6 +174,8 @@ export interface RouteFacts {
   goalClear: boolean;
   hasValidationPath: boolean;
   intent: string;
+  level: number | null;
+  modules: number;
   noNewBusinessState: boolean;
   repositories: number;
   requestsAsync: boolean;
@@ -168,7 +192,7 @@ export interface RouteClassification {
   changeClass: string | null;
   changeType: string | null;
   entry: string;
-  microChangeEligible: boolean;
+  lightEligible: boolean;
   reasonCodes: string[];
   riskFlags: string[];
   route: string;

@@ -385,7 +385,7 @@ export const validateWorkflowProfile = (profile: unknown): string[] => {
       });
     });
     validateStringMap(taskModel.changeTypeByIntent, 'taskModel.changeTypeByIntent', errors);
-    validateStringMap(taskModel.microStages, 'taskModel.microStages', errors);
+    validateStringMap(taskModel.changeStages, 'taskModel.changeStages', errors);
     if (!isJsonObject(taskModel.expectedIntentEntries)) {
       errors.push('taskModel.expectedIntentEntries 必须是对象');
     }
@@ -406,10 +406,10 @@ export const validateWorkflowProfile = (profile: unknown): string[] => {
           errors.push(`changeTypeByIntent 映射到未知 changeType：${changeType}`);
         }
       });
-      const microStages = stringMapProperty(taskModel, 'microStages');
+      const changeStages = stringMapProperty(taskModel, 'changeStages');
       taskModel.changeTypes.forEach((changeType) => {
-        if (!microStages[changeType]) {
-          errors.push(`microStages 缺少 changeType：${changeType}`);
+        if (!changeStages[changeType]) {
+          errors.push(`changeStages 缺少 changeType：${changeType}`);
         }
       });
     }

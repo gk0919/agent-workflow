@@ -223,7 +223,7 @@ export const main = (args: string[] = process.argv.slice(2)): number => {
           process.stdout.write(`任务 ${taskId} 已完成，没有待续接阶段。\n`);
           return 0;
         }
-        const route = command === 'prepare' ? 'task-handoff' : 'portable-resume';
+        const route = command === 'prepare' ? 'task-handoff' : 'task-portable-resume';
         const stage = command === 'prepare' ? 'prepare' : 'resume';
         process.stdout.write(`已选择任务：${taskId} | ${selected.currentStage} | ${selected.status}\n`);
         const routeResult = routeMain(['--route', route, '--stage', stage, '--entry', selected.entry, '--materialize']);

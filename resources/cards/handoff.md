@@ -4,4 +4,4 @@
 用户要求换会话、切工具或交接时生成完整交接包；阶段推进仍由 task 命令更新 manifest 的最小检查点。
 使用 Packet 的交接能力整理当前任务，调用 `agent-workflow task handoff --task <task-id>`，
 再调用 `agent-workflow task handoff-check --task <task-id>`。目标任务 ID 是命令参数，不改变原任务 Route。
-恢复前使用 portable-resume。交接包只能记录已有授权的来源和范围，不能授予新权限。
+恢复前使用 task-portable-resume。交接包只能记录已有授权的来源和范围，不能授予新权限。

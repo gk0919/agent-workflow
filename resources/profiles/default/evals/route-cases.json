@@ -5,31 +5,37 @@
       "id": "provider-list",
       "prompt": "列出项目已配置 Source Provider 中的待处理事项。",
       "facts": {"intent": "pool-capture", "entry": "pool"},
-      "expected": {"route": "pool-capture", "stage": "capture"}
+      "expected": {"route": "task-pool-capture", "stage": "capture"}
     },
     {
-      "id": "workflow-maintenance",
+      "id": "task-workflow-maintenance",
       "prompt": "检查并改进工作流配置。",
       "facts": {"intent": "workflow-maintenance", "entry": "not-applicable"},
-      "expected": {"route": "workflow-maintenance", "stage": "inspect"}
+      "expected": {"route": "task-workflow-maintenance", "stage": "inspect"}
     },
     {
-      "id": "git-only",
+      "id": "level-4",
+      "prompt": "把认证拆成独立服务，涉及三个仓库的公共契约与数据迁移。",
+      "facts": {"intent": "architecture", "entry": "direct"},
+      "expected": {"route": "level-4", "stage": "capture"}
+    },
+    {
+      "id": "task-git",
       "prompt": "只检查仓库状态和差异。",
       "facts": {"intent": "git-only", "entry": "not-applicable"},
-      "expected": {"route": "git-only", "stage": "inspect"}
+      "expected": {"route": "task-git", "stage": "inspect"}
     },
     {
-      "id": "analysis-direct",
+      "id": "task-analysis-direct",
       "prompt": "分析给定行为，不修改文件。",
       "facts": {"intent": "analysis", "entry": "direct"},
-      "expected": {"route": "analysis", "stage": "capture"}
+      "expected": {"route": "task-analysis", "stage": "capture"}
     },
     {
       "id": "review-direct",
       "prompt": "只审查给定补丁。",
       "facts": {"intent": "review", "entry": "direct"},
-      "expected": {"route": "review-only", "stage": "capture"}
+      "expected": {"route": "task-review", "stage": "capture"}
     },
     {
       "id": "micro-defect",
@@ -46,10 +52,10 @@
         "hasValidationPath": true
       },
       "expected": {
-        "route": "micro-change",
+        "route": "level-1",
         "stage": "locate-defect",
         "changeType": "defect",
-        "microChangeEligible": true
+        "lightEligible": true
       }
     },
     {
@@ -71,11 +77,148 @@
         "hasValidationPath": true
       },
       "expected": {
-        "route": "micro-change",
+        "route": "level-1",
         "stage": "locate-requirement",
         "changeType": "requirement",
-        "microChangeEligible": true
+        "lightEligible": true
       }
+    },
+    {
+      "id": "quick-cosmetic",
+      "prompt": "把按钮文案改成保存并关闭，不改任何行为。",
+      "facts": {
+        "intent": "cosmetic",
+        "entry": "direct",
+        "level": 0,
+        "goalClear": true,
+        "acceptanceClear": true,
+        "behaviorClear": true,
+        "usesExistingPattern": true,
+        "noNewBusinessState": true,
+        "compatibilityClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "level-0",
+        "stage": "locate-cosmetic",
+        "changeType": "cosmetic",
+        "lightEligible": true
+      }
+    },
+    {
+      "id": "quick-cosmetic-default-level",
+      "prompt": "调整一个样式细节，声明省略时按事实推导为 L0。",
+      "facts": {
+        "intent": "cosmetic",
+        "entry": "direct",
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "level-0",
+        "stage": "locate-cosmetic",
+        "changeType": "cosmetic",
+        "lightEligible": true
+      }
+    },
+    {
+      "id": "quick-cosmetic-downgrade",
+      "prompt": "声称只是外观改动，但实际改动 5 个文件。",
+      "facts": {
+        "intent": "cosmetic",
+        "entry": "direct",
+        "level": 0,
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 5,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {"error": "不能声明更低的 --level 0"}
+    },
+    {
+      "id": "micro-level-downgrade",
+      "prompt": "缺陷修复却声明为 L0。",
+      "facts": {
+        "intent": "defect",
+        "entry": "direct",
+        "level": 0,
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {"error": "不能声明更低的 --level 0"}
+    },
+    {
+      "id": "micro-level-over-declared",
+      "prompt": "缺陷修复主动声明为 L2，选择更严的流程。",
+      "facts": {
+        "intent": "defect",
+        "entry": "direct",
+        "level": 2,
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "level-2",
+        "stage": "capture",
+        "changeType": "defect",
+        "lightEligible": true
+      }
+    },
+    {
+      "id": "level-3-cross-module",
+      "prompt": "同一缺陷修复跨两个模块，需要方案设计与兼容评估。",
+      "facts": {
+        "intent": "defect",
+        "entry": "direct",
+        "modules": 2,
+        "goalClear": true,
+        "acceptanceClear": true,
+        "uniqueLocation": true,
+        "repositories": 1,
+        "files": 1,
+        "semanticLines": 2,
+        "hasValidationPath": true
+      },
+      "expected": {
+        "route": "level-3",
+        "stage": "capture",
+        "changeType": "defect",
+        "lightEligible": false
+      }
+    },
+    {
+      "id": "risk-state-refactor",
+      "prompt": "重构状态管理，涉及多处共享状态。",
+      "risk": "state-refactor",
+      "expected": {"route": "level-3", "stage": "capture"}
+    },
+    {
+      "id": "risk-performance-program",
+      "prompt": "做一轮性能优化专项。",
+      "risk": "performance-program",
+      "expected": {"route": "level-3", "stage": "capture"}
     },
     {
       "id": "upgrade-goal-unclear",
@@ -91,7 +234,7 @@
         "hasValidationPath": true
       },
       "expected": {
-        "route": "standard-change",
+        "route": "level-2",
         "stage": "capture",
         "blocker": "goal-unclear"
       }
@@ -114,7 +257,7 @@
         "hasValidationPath": true
       },
       "expected": {
-        "route": "standard-change",
+        "route": "level-2",
         "stage": "capture",
         "blocker": "behavior-unclear"
       }
@@ -134,7 +277,7 @@
         "hasValidationPath": true
       },
       "expected": {
-        "route": "standard-change",
+        "route": "level-2",
         "stage": "capture",
         "blocker": "repository-count"
       }

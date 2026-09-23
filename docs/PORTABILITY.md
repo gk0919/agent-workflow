@@ -7,7 +7,7 @@
 ```text
 Bootstrap
   -> 识别 intent 与 source
-  -> 选择 Read-only、Quick Change、Standard Change 或 High-risk Change
+  -> 选择 Read-only、level-0、level-2 或 High-risk Change
   -> 捕获事实与验收标准
   -> 设计并等待 Approval
   -> Implement
@@ -17,7 +17,7 @@ Bootstrap
   -> 结束任务、记录 Feedback，并按需暂存 Knowledge
 ```
 
-只读任务跳过设计和实现。Quick Change 使用对话内 Brief；Standard Change 使用可追踪 Spec；高风险任务在 Standard Change 基础上增加人工确认、独立审查或发布协同。
+只读任务跳过设计和实现。level-0 使用对话内 Brief；level-2 使用可追踪 Spec；高风险任务在 level-2 基础上增加人工确认、独立审查或发布协同。
 
 ## 分层
 

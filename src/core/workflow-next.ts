@@ -127,13 +127,19 @@ export const deriveNextRouteFromModel = (
 export const buildNextRouteArguments = (
   derived: DerivedRoute,
   remainingArgs: string[] = [],
-): string[] => [
-  '--route', derived.route,
-  '--stage', derived.stage,
-  '--entry', derived.entry,
-  '--task', derived.taskId,
-  ...remainingArgs,
-];
+): string[] => {
+  // Grade Routes require the declared grade; the task owns its Route identity, so
+  // the continuation call restates it instead of asking the caller to repeat it.
+  const requiredLevel = loadRoutes().routes[derived.route]?.requiredLevel;
+  return [
+    '--route', derived.route,
+    '--stage', derived.stage,
+    '--entry', derived.entry,
+    '--task', derived.taskId,
+    ...(requiredLevel === undefined ? [] : ['--level', String(requiredLevel)]),
+    ...remainingArgs,
+  ];
+};
 
 export const main = (args: string[] = process.argv.slice(2)): number => {
   try {

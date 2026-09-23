@@ -323,12 +323,12 @@ export const validateRoutes = (
     errors.push('riskCatalog 包含重复风险标识');
   }
 
-  const microChangeGate = config.microChangeGate;
-  if (!microChangeGate || typeof microChangeGate !== 'object' ||
-      Array.isArray(microChangeGate)) {
-    errors.push('routes.json 缺少 microChangeGate');
+  const changeGate = config.changeGate;
+  if (!changeGate || typeof changeGate !== 'object' ||
+      Array.isArray(changeGate)) {
+    errors.push('routes.json 缺少 changeGate');
   } else {
-    const gateFields: Array<keyof RoutesConfig['microChangeGate']> = [
+    const gateFields: Array<keyof RoutesConfig['changeGate']> = [
       'repositories',
       'minFiles',
       'maxFiles',
@@ -336,17 +336,17 @@ export const validateRoutes = (
       'maxSemanticLines',
     ];
     gateFields.forEach((field) => {
-      if (!Number.isInteger(microChangeGate[field]) ||
-          microChangeGate[field] < 1) {
-        errors.push(`microChangeGate.${field} 必须是正整数`);
+      if (!Number.isInteger(changeGate[field]) ||
+          changeGate[field] < 1) {
+        errors.push(`changeGate.${field} 必须是正整数`);
       }
     });
-    if (microChangeGate.minFiles > microChangeGate.maxFiles) {
-      errors.push('microChangeGate.minFiles 不能大于 maxFiles');
+    if (changeGate.minFiles > changeGate.maxFiles) {
+      errors.push('changeGate.minFiles 不能大于 maxFiles');
     }
-    if (microChangeGate.minSemanticLines > microChangeGate.maxSemanticLines) {
+    if (changeGate.minSemanticLines > changeGate.maxSemanticLines) {
       errors.push(
-        'microChangeGate.minSemanticLines 不能大于 maxSemanticLines',
+        'changeGate.minSemanticLines 不能大于 maxSemanticLines',
       );
     }
   }
@@ -533,6 +533,91 @@ export const validateRoutes = (
           }
         });
       }
+    }
+
+    const booleanGates = [
+      'factClassificationRequired',
+      'implementationApprovalRequired',
+      'manualSelectionOnly',
+      'patchLogRequired',
+      'reopenable',
+      'verifiedContractRequired',
+      'workItemApprovalRequired',
+    ] as const;
+    booleanGates.forEach((field) => {
+      if (route[field] !== undefined && typeof route[field] !== 'boolean') {
+        errors.push(`${routeName}.${field} 必须是布尔值`);
+      }
+    });
+    if (route.escalationRiskFlags !== undefined) {
+      const flags = route.escalationRiskFlags;
+      if (!Array.isArray(flags) || flags.length === 0 ||
+          flags.some((flag) => typeof flag !== 'string') ||
+          new Set(flags).size !== flags.length) {
+        errors.push(`${routeName}.escalationRiskFlags 必须是不重复的非空风险标识数组`);
+      } else {
+        flags.forEach((flag) => {
+          if (!config.riskCatalog.includes(flag)) {
+            errors.push(`${routeName}.escalationRiskFlags 包含未知风险标识 ${flag}`);
+          }
+        });
+      }
+      if (route.factClassificationRequired !== true) {
+        errors.push(`${routeName}.escalationRiskFlags 需要先声明 factClassificationRequired`);
+      }
+    }
+    if (route.escalationMinModules !== undefined &&
+        (!Number.isInteger(route.escalationMinModules) || route.escalationMinModules < 2)) {
+      errors.push(`${routeName}.escalationMinModules 必须是不小于 2 的整数`);
+    }
+    if (route.manualSelectionOnly === true && route.factClassificationRequired === true) {
+      errors.push(`${routeName}.manualSelectionOnly 不能与 factClassificationRequired 同时声明`);
+    }
+    if (route.implementationApprovalRequired === true && !stageNames.has('implement')) {
+      errors.push(`${routeName}.implementationApprovalRequired 需要登记 implement 阶段`);
+    }
+    if (route.requiredLevel !== undefined) {
+      if (!Number.isInteger(route.requiredLevel) ||
+          route.requiredLevel < 0 ||
+          route.requiredLevel > 4) {
+        errors.push(`${routeName}.requiredLevel 必须是 0 到 4 之间的整数`);
+      }
+      if (route.factClassificationRequired !== true) {
+        errors.push(`${routeName}.requiredLevel 需要先声明 factClassificationRequired`);
+      }
+    }
+    const prerequisites = route.implementationPrerequisites;
+    if (prerequisites !== undefined) {
+      const artifacts = prerequisites?.artifacts;
+      if (!Array.isArray(artifacts) || artifacts.length === 0 ||
+          artifacts.some((fileName) =>
+            typeof fileName !== 'string' || !fileName.trim())) {
+        errors.push(
+          `${routeName}.implementationPrerequisites.artifacts 必须是非空文件数组`,
+        );
+      } else if (new Set(artifacts).size !== artifacts.length) {
+        errors.push(`${routeName}.implementationPrerequisites.artifacts 包含重复项`);
+      }
+      const prerequisitesSpecStatus = prerequisites?.specStatus;
+      if (prerequisitesSpecStatus !== undefined &&
+          (typeof prerequisitesSpecStatus !== 'string' ||
+            !prerequisitesSpecStatus.trim())) {
+        errors.push(
+          `${routeName}.implementationPrerequisites.specStatus 必须是非空字符串`,
+        );
+      }
+      if (!taskFlow) {
+        errors.push(`${routeName}.implementationPrerequisites 需要先定义 taskFlow`);
+      }
+    }
+    if (route.reopenable === true && !taskFlow) {
+      errors.push(`${routeName}.reopenable 需要先定义 taskFlow`);
+    }
+    if (route.verifiedContractRequired === true && !taskFlow) {
+      errors.push(`${routeName}.verifiedContractRequired 需要先定义 taskFlow`);
+    }
+    if (route.workItemApprovalRequired === true && !taskFlow) {
+      errors.push(`${routeName}.workItemApprovalRequired 需要先定义 taskFlow`);
     }
 
     (route.references || []).forEach((relativePath) =>
@@ -745,21 +830,26 @@ export const buildRoutePacket = ({
         `结构化事实 Entry 为 ${classification.entry}，不能生成 Entry ${entry}`,
       );
     }
-    if (routeName === 'micro-change') {
+  }
+  // Route selection already requires facts for every fact-classified Route; a micro-style Route
+  // additionally constrains the packet stage by change type here.
+  if (route.factClassificationRequired === true && route.stagePaths) {
+    if (!classification) {
+      throw new Error(
+        '等级 Route 必须通过结构化事实分类；在 workflow:route 中提供 --intent 和全部 Gate 事实',
+      );
+    }
+    {
       if (!classification.changeType) {
-        throw new Error('Micro Change 分类缺少 changeType');
+        throw new Error('分类缺少 changeType');
       }
-      const stagePath = route.stagePaths?.[classification.changeType] || [];
+      const stagePath = route.stagePaths[classification.changeType] || [];
       if (!stagePath.includes(stageName)) {
         throw new Error(
-          `Micro Change ${classification.changeType} 分类不能进入 Stage ${stageName}`,
+          `${classification.changeType} 分类不能进入 Stage ${stageName}`,
         );
       }
     }
-  } else if (routeName === 'micro-change') {
-    throw new Error(
-      'Micro Change 必须通过结构化事实分类；在 workflow:route 中提供 --intent 和全部 Gate 事实',
-    );
   }
 
   const selectedRiskFlags = unique([
@@ -924,7 +1014,7 @@ export const formatRoutePacket = (packet: RoutePacketBase): string => [
       `patch ${packet.microGuard.patchHash}, source ${packet.microGuard.sourceHash})`
     : '',
   packet.microBrief
-    ? `- Micro Brief: passed (G${packet.microBrief.goalCount}, ` +
+    ? `- Brief: passed (G${packet.microBrief.goalCount}, ` +
       `AC${packet.microBrief.acceptanceCount}, OOS${packet.microBrief.outOfScopeCount}, ` +
       `C${packet.microBrief.changeCount}, VT${packet.microBrief.verificationCount}, ` +
       `plan ${packet.microBrief.planHash})`

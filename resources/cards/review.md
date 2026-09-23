@@ -2,7 +2,7 @@
 
 只审查任务专属 patch，按严重度报告有证据的 Findings；无问题时明确说明。使用 Route Packet 的 Active Profile 所声明的 Review Skill，只加载 patch 实际命中的主题 Reference。UI 只选择命中场景的 Skill。
 
-核对任务一致性、边界、异常、兼容性、生命周期、安全和无关改动。Micro Change 按意图卡增加检查：`defect` 核对根因与回归点，`requirement` 核对验收、默认状态、旧行为兼容和权限边界。
+核对任务一致性、边界、异常、兼容性、生命周期、安全和无关改动。level-1 按意图卡增加检查：`defect` 核对根因与回归点，`requirement` 核对验收、默认状态、旧行为兼容和权限边界。
 
 核对实际修改是否位于正确责任层并形成最小完整语义闭环；将只覆盖当前案例的特判、重复规则/
 状态、用兜底掩盖上游错误，以及缺少同类/扩展/异常场景证据列为 Finding 或 Test Gap。
