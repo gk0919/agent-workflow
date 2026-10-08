@@ -46,6 +46,11 @@ export const TOOL_TARGETS: readonly ToolTarget[] = Object.freeze([
     bootstrap: 'shared',
   },
   {
+    name: 'pi',
+    adapter: 'resources/adapters/pi.md',
+    bootstrap: 'shared',
+  },
+  {
     name: 'claude-code',
     adapter: 'resources/adapters/claude-code.md',
     bootstrap: 'managed',
