@@ -63,6 +63,9 @@ try {
     assert.throws(() => controller.propose('Invalid scope', [file]), Error, file);
   }
   const proposal = controller.propose('Preserve user lines, add approved line', ['target.txt', 'new.txt']);
+  assert.equal(controller.status().proposal?.id, proposal.id, 'Readonly status preserves a proposal');
+  controller.diff(); controller.files.read('target.txt');
+  assert.equal(controller.status().proposal?.id, proposal.id);
   assert.throws(() => controller.approve('forged-id'), /Proposal/);
   assert.equal(controller.approve(proposal.id).approved, true);
   assert.match(controller.context(), /Implement Card/);

@@ -40,6 +40,7 @@ export class WorkflowController {
   #proposedState: string | undefined;
   #approvedState: string | undefined;
   #approvedId: string | undefined;
+  #proposalIssue = '';
   #disposed = false;
 
   constructor(workspace: string, private readonly bridge?: (request: BridgeRequest) => unknown,
@@ -100,27 +101,32 @@ export class WorkflowController {
   }
 
   start(input: ControlledTaskInit): ControlledTaskSnapshot {
-    this.revoke(); this.#proposal = undefined; this.#taskId = input.taskId;
+    this.revoke(); this.#proposal = undefined; this.#proposalIssue = ''; this.#taskId = input.taskId;
     return this.#request('init', { args: ['--route', input.route, '--entry', input.entry, '--goal', input.goal, '--repository', '.',
       ...(input.sourceType ? ['--source-type', input.sourceType] : []), ...(input.sourceText ? ['--source-text', input.sourceText] : []),
       ...(input.sourceId ? ['--source-id', input.sourceId] : [])] });
   }
 
   resume(taskId: string): ControlledTaskSnapshot {
-    this.revoke(); this.#proposal = undefined; this.#taskId = taskId;
+    this.revoke(); this.#proposal = undefined; this.#proposalIssue = ''; this.#taskId = taskId;
     return this.inspect().task;
   }
 
   inspect(): { task: ControlledTaskSnapshot; issue: string } { return this.#request('inspection'); }
   operationDirectory(): string { return this.#request('operation-directory'); }
 
-  status(): { task: ControlledTaskSnapshot; proposal: ControlledProposal | null; approved: boolean; issue: string } {
+  status(): { task: ControlledTaskSnapshot; proposal: ControlledProposal | null; approved: boolean; issue: string; proposalIssue: string } {
     const { task, issue } = this.inspect();
     if (issue) this.revoke();
     if (this.#approvedState !== task.stateToken) this.revoke();
     // Git fingerprints omit ignored files; their approved preimages still bind permission.
     if (this.#approvedState && this.#proposal?.files.some((file) => this.files.baseline(file.path) !== file.beforeHash)) this.revoke();
-    return { task, proposal: this.#proposal ? structuredClone(this.#proposal) : null, approved: this.#approvedState !== undefined, issue };
+    if (this.#proposal && !this.#approvedState && (issue || this.#proposedState !== task.stateToken ||
+        this.#proposal.files.some(file => this.files.baseline(file.path) !== file.beforeHash))) {
+      this.#proposal = undefined;
+      this.#proposalIssue = 'Proposal expired: task checkpoint, repository or file preimage changed. Reload stage and submit a new proposal before asking for approval.';
+    }
+    return { task, proposal: this.#proposal ? structuredClone(this.#proposal) : null, approved: this.#approvedState !== undefined, issue, proposalIssue: this.#proposalIssue };
   }
 
   /** No repository scan is needed when this controller has no live write grant. */
@@ -176,24 +182,26 @@ export class WorkflowController {
     const task = this.#request<ControlledTaskSnapshot>('snapshot');
     if (!task.planHash || !task.plan?.trim()) throw new Error('Author the Core task plan before proposing changes');
     if (!task.repositoryCurrent) throw new Error('Inspect and reconcile the current repository before proposing');
-    if (!summary.trim() || !paths.length || paths.length > 100 || new Set(paths.map((value) => value.toLowerCase())).size !== paths.length) throw new Error('Expected summary and 1–100 distinct file paths');
+    if (!summary.trim() || paths.length > 100 || new Set(paths.map((value) => value.toLowerCase())).size !== paths.length) throw new Error('Expected summary and 0–100 distinct file paths; empty scope means verification only');
     const definition = { taskId: task.taskId, planHash: task.planHash, summary, files: paths.map((value) => ({ path: value, beforeHash: this.files.baseline(value) })) };
     const id = createHash('sha256').update(JSON.stringify({ definition, state: task.stateToken })).digest('hex');
     this.#proposedState = task.stateToken;
+    this.#proposalIssue = '';
     this.#proposal = { id, ...definition };
     return structuredClone(this.#proposal);
   }
 
   approve(id: string): { task: ControlledTaskSnapshot; proposal: ControlledProposal | null; approved: boolean } {
     this.revoke();
-    const proposal = this.#proposal;
+    const { proposal, proposalIssue } = this.status();
     const state = this.#request<ControlledTaskSnapshot>('snapshot');
-    if (!proposal || proposal.id !== id || this.#proposedState !== state.stateToken) throw new Error('Proposal is missing or stale; propose again');
+    if (!proposal || proposal.id !== id || this.#proposedState !== state.stateToken) throw new Error(proposalIssue || 'Proposal is missing or stale; propose again');
     for (const file of proposal.files) if (this.files.baseline(file.path) !== file.beforeHash) throw new Error(`File baseline changed: ${file.path}`);
     this.#request('approve');
     const admitted = this.#request<ControlledTaskSnapshot>('admit');
     if (admitted.planHash !== proposal.planHash) throw new Error('Plan changed during approval');
-    this.#approvedState = admitted.stateToken; this.#approvedId = id;
+    if (proposal.files.length) { this.#approvedState = admitted.stateToken; this.#approvedId = id; }
+    else this.#proposal = undefined;
     return this.status();
   }
 

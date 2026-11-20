@@ -17,11 +17,12 @@ export interface FixedCheck {
   testId?: string;
 }
 export interface AutomationOptions { checks?: FixedCheck[]; maxCorrections?: number }
-export interface AutomationProgress { stage: string; failures: number; paused: boolean; lastError: string; approvalPending?: boolean; implementationWritten?: boolean }
+export interface AutomationProgress { stage: string; failures: number; paused: boolean; lastError: string; approvalPending?: boolean; implementationWritten?: boolean; noCodePlanHash?: string }
 export interface AutomationDelivery {
   task: ControlledTaskSnapshot;
   progress: AutomationProgress;
   waitingFor: 'model' | 'approval' | 'human' | 'complete';
+  approval: { proposalId: string | null; issue: string; verificationOnly: boolean };
   context: string | null;
   nextAction: string;
   recovery: { issue: string; pending: import('./operations.js').PendingOperation | null };

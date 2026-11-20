@@ -6,6 +6,14 @@
 
 ## Public contract
 
+`propose(summary, [])` 明确表示仅核对验证，须写明现有代码证据并由人工批准。
+批准仍通过现有阶段门禁，核对工作项、Review 和 Verify 不得跳过；空范围不授予代码写入权限，
+批准的只读模式绑定计划哈希，跨暂停和恢复保持有效。需要代码修改时重新提出精确文件范围并批准。
+核对目标仍关联计划文件与测试点；无实际修改时 actualChanges 保持 []，固定检查通过后可以 verified，
+不为满足模板虚构 Actual Change。implemented 仍要求真实改动记录。
+`status()` 提前清除检查点、仓库或前像变化后的失效提案，并返回 `proposalIssue`；
+`delivery().approval` 区分有效提案、尚无有效提案和已批准的只读模式。只读查询不改变提案基线。
+
 ```ts
 import { WorkflowController } from '@gk0919/agent-workflow/control';
 const control = new WorkflowController(workspaceRoot);

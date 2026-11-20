@@ -24,15 +24,18 @@ const operate = <T>(kind: string, args: unknown[], execute: () => T): T => opera
 }, control.status().task.stateToken);
 const bindOperations = (): void => { operations = new ControlOperations(control.operationDirectory()); };
 const delivery = (): AutomationDelivery => {
-  const { task, issue, approved } = control.status();
+  const { task, issue, approved, proposal, proposalIssue } = control.status();
   const pending = executingOperation ? null : operations.pending();
   const progress = control.progress();
+  const verificationOnly = task.stage === 'Implement' && !!progress.noCodePlanHash && progress.noCodePlanHash === task.planHash;
   const waitingFor = issue || pending || progress.paused || task.status === 'blocked' ? 'human'
     : task.status === 'complete' ? 'complete'
-    : !approved && ((task.stage === 'Implement' && !progress.implementationWritten) || (task.stage !== 'Implement' && progress.approvalPending)) ? 'approval' : 'model';
+    : !approved && !verificationOnly && ((task.stage === 'Implement' && !progress.implementationWritten) || (task.stage !== 'Implement' && progress.approvalPending)) ? 'approval' : 'model';
   let context: string | null = null;
   if (waitingFor === 'model') {
-    if (task.stage === 'Implement' && progress.implementationWritten && !approved) {
+    if (verificationOnly) {
+      context = 'Human approved a verification-only plan. Repository remains read-only: inspect existing implementation and submit evidence for every Implement work item, then continue Review/Verify. Any code change requires a new exact file scope proposal and human approval.';
+    } else if (task.stage === 'Implement' && progress.implementationWritten && !approved) {
       context = 'The approved batch has been written. Inspect workflow_diff and complete stage evidence; any further code write needs a new proposal and human approval.';
     } else {
       try { process.send!({ progress: 'context' }); context = control.context(); }
@@ -43,9 +46,9 @@ const delivery = (): AutomationDelivery => {
     : pending ? 'Inspect partial effects, reconcile if necessary, then human /workflow recover'
     : task.status === 'blocked' ? 'Resolve the Core blocker with evidence, then human task resume'
     : progress.paused ? `Human input required: ${progress.lastError || 'paused'}`
-    : waitingFor === 'approval' ? 'Propose exact file scope; human status then approve'
+    : waitingFor === 'approval' ? (proposal ? 'Human review the current proposal, then /workflow approve' : proposalIssue || 'Agent must submit a proposal first; use empty file scope for verification only. Do not ask human to approve yet.')
     : waitingFor === 'complete' ? 'Deliver recorded results' : `Continue ${task.stage}; submit evidence from the latest stateToken`;
-  return { task, progress, waitingFor, context, nextAction, recovery: { issue, pending }, taskDirectory: task.taskDirectory };
+  return { task, progress, waitingFor, approval: { proposalId: proposal?.id ?? null, issue: proposalIssue, verificationOnly }, context, nextAction, recovery: { issue, pending }, taskDirectory: task.taskDirectory };
 };
 const requireRunning = (): void => {
   if (!executingOperation && operations.pending()) throw new Error('Uncertain operation; human recover is required');
@@ -81,8 +84,22 @@ const execute = (method: string, args: unknown[]): unknown => {
     case 'diff': return control.diff();
     case 'artifact': requireRunning(); return control.artifact(args[0] as string, args[1] as string);
     case 'artifacts': requireRunning(); return control.artifacts(args[0] as Array<{ file: string; content: string }>, args[1] as string);
-    case 'propose': requireRunning(); return control.propose(args[0] as string, args[1] as string[]);
-    case 'approve': requireRunning(); control.approve(args[0] as string); return delivery();
+    case 'propose': {
+      requireRunning();
+      const progress = control.progress();
+      if (progress.noCodePlanHash) {
+        const { noCodePlanHash: _previousApproval, ...remaining } = progress;
+        control.progress(remaining);
+      }
+      return control.propose(args[0] as string, args[1] as string[]);
+    }
+    case 'approve': {
+      requireRunning();
+      const verificationOnly = control.status().proposal?.files.length === 0;
+      const result = control.approve(args[0] as string);
+      if (verificationOnly) control.progress({ ...control.progress(), stage: result.task.stage, approvalPending: false, noCodePlanHash: result.task.planHash! });
+      return delivery();
+    }
     case 'apply': return operate('apply', args, () => {
       requireRunning();
       const result = control.apply(args[0] as string, args[1] as ControlledWrite[]);

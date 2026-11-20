@@ -126,6 +126,49 @@ try {
   assert.equal((await submit('changes.md#Delivery')).waitingFor, 'complete');
   assert.equal((await control.status()).task.status, 'complete');
 
+  // A verification-only plan still needs human approval and ordinary evidence gates.
+  const readOnlyRun = await control.run(path.join(root, 'request.md'), 'workflow-maintenance');
+  const existingContract = { ...contract, taskId: readOnlyRun.task.taskId, contractStatus: 'planned', actualChanges: [] };
+  await control.artifact('verification.json', JSON.stringify(existingContract));
+  await control.artifact('changes.md', '# Changes\n\n## Existing\nExisting code satisfies the request; no code change required.\n');
+  await control.artifact('plan.md', `---\nplan_version: 1\ntask_id: ${readOnlyRun.task.taskId}\n---\n## Work Items\n- [ ] T1: Inspect existing behavior\n  - Stage: Implement\n  - Artifact: changes.md#Existing\n  - Done When: Existing code inspected\n`);
+  await submit('changes.md#Existing');
+  let readOnlyProposal = await control.propose('Verify existing code; no code changes', []);
+  assert.equal((await control.delivery()).approval.proposalId, readOnlyProposal.id);
+  await control.pause('Exercise checkpoint invalidation');
+  await control.continue();
+  const staleProposal = await control.status();
+  assert.equal(staleProposal.proposal, null);
+  assert.match(staleProposal.proposalIssue, /expired/);
+  assert.equal((await control.delivery()).approval.proposalId, null);
+  await assert.rejects(control.approve(readOnlyProposal.id), /expired/);
+  readOnlyProposal = await control.propose('Verify existing code; no code changes', []);
+  const readOnlyApproval = await control.approve(readOnlyProposal.id);
+  assert.equal(readOnlyApproval.waitingFor, 'model');
+  assert.equal(readOnlyApproval.approval.verificationOnly, true);
+  assert.equal(await control.canApply(), false);
+  await assert.rejects(control.apply(readOnlyProposal.id, [{ path: 'code.txt', beforeHash: (await control.read('code.txt')).hash, content: 'must not write' }]), /approval/);
+  await control.pause(); await control.continue();
+  const readOnlyRestart = new AsyncWorkflowController(root); controllers.push(readOnlyRestart);
+  assert.equal((await readOnlyRestart.resume(readOnlyRun.task.taskId)).waitingFor, 'model', 'Readonly approval survives restart');
+  const changedScope = await control.propose('New code scope needs another human decision', ['code.txt']);
+  assert.equal((await control.delivery()).waitingFor, 'approval');
+  assert.equal((await control.delivery()).approval.verificationOnly, false, 'New proposals do not inherit readonly approval');
+  await assert.rejects(control.apply(changedScope.id, [{ path: 'code.txt', beforeHash: (await control.read('code.txt')).hash, content: 'unapproved' }]), /approval/);
+  readOnlyProposal = await control.propose('Keep existing implementation; verify only', []);
+  await control.approve(readOnlyProposal.id);
+  await control.artifact('changes.md', '# Changes\n\n## Existing\nExisting implementation inspected; no changes made.\n');
+  assert.equal((await submit('changes.md#Existing', [{ id: 'T1', evidence: 'changes.md#Existing' }])).task.stage, 'Review');
+  await control.artifact('review.md', '# Review\nExisting implementation reviewed.\n');
+  assert.equal((await submit('review.md')).task.stage, 'Verify');
+  await control.artifact('verify.md', '# Verify\nExisting content checked by trusted fixed check.\n');
+  assert.equal((await submit('verify.md')).task.stage, 'Git Inspect');
+  const existingVerified = JSON.parse(readFileSync(path.join(root, readOnlyRun.taskDirectory, 'verification.json'), 'utf8'));
+  assert.equal(existingVerified.contractStatus, 'verified');
+  assert.deepEqual(existingVerified.actualChanges, [], 'Verification-only tasks never invent actual changes');
+  assert.equal((await submit('changes.md#Existing')).waitingFor, 'complete');
+  assert.equal(readFileSync(path.join(root, 'code.txt'), 'utf8'), before.content + 'approved\n');
+
   // A second run exercises persisted correction budgets, empty evidence and human-only reset.
   await control.run(path.join(root, 'request.md'), 'workflow-maintenance');
   let failure = await submit('missing.md');

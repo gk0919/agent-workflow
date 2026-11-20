@@ -601,8 +601,8 @@ export const validateVerificationContract = (
     }
   });
 
-  if (['implemented', 'verified'].includes(contractStatus) &&
-      actualChanges.length === 0) {
+  // Verified describes test results, including an unchanged implementation that already satisfies the goal.
+  if (contractStatus === 'implemented' && actualChanges.length === 0) {
     errors.push(`${contractStatus} 契约必须包含 Actual Change`);
   }
   if (contractStatus === 'planned' && actualChanges.length > 0) {
