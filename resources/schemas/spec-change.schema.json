@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-workflow.local/schemas/spec-change.json",
+  "title": "Task capability delta v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "taskId", "capabilities"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "taskId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "capabilities": {
+      "type": "array", "minItems": 1, "maxItems": 30,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "baseline", "changes"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "baseline": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object", "additionalProperties": false,
+                "required": ["path", "hash", "content"],
+                "properties": {
+                  "path": { "type": "string", "minLength": 1, "maxLength": 500 },
+                  "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                  "content": { "type": "string", "minLength": 1, "maxLength": 131072 }
+                }
+              }
+            ]
+          },
+          "changes": {
+            "type": "array", "maxItems": 100,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["operation", "requirementId", "reason", "acceptanceIds", "verificationIds"],
+              "properties": {
+                "operation": { "enum": ["added", "modified", "removed"] },
+                "requirementId": { "type": "string", "pattern": "^R[1-9][0-9]*$" },
+                "requirement": { "$ref": "https://agent-workflow.local/schemas/capability-spec.json#/$defs/requirement" },
+                "reason": { "$ref": "https://agent-workflow.local/schemas/capability-spec.json#/$defs/text" },
+                "acceptanceIds": { "type": "array", "minItems": 1, "maxItems": 50, "uniqueItems": true, "items": { "type": "string", "pattern": "^AC[1-9][0-9]*$" } },
+                "verificationIds": { "type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true, "items": { "type": "string", "pattern": "^VT[1-9][0-9]*$" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

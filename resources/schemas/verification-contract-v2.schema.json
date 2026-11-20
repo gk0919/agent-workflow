@@ -15,6 +15,7 @@
     "testPoints"
   ],
   "properties": {
+    "specChangeHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "schemaVersion": {"const": 2},
     "taskId": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
     "contractStatus": {

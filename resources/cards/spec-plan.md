@@ -4,6 +4,16 @@
 `G` / `AC` / `OOS` / `C` / `VT` ID。每个 AC 至少映射一个目标文件和一个测试点；
 验证方式明确为 static、MCP / Playwright、CLI、CI、manual 或 not-verifiable，并记录执行主体。
 
+Spec 分开描述行为需求与技术设计：按实际变化标记 ADDED / MODIFIED / REMOVED，
+每条需求引用 AC，至少一个 WHEN / THEN 场景（按需 GIVEN），场景引用覆盖结果的 VT。
+修改行为写清变更后的完整规则和保留行为；删除行为说明替代或迁移。不臆造异常场景。
+沿用 spec.md 的行为/设计分节、plan.md 的执行清单和 verification.json 的结构化事实源，
+不重复建立 ID、产物或状态机；具体模板按需读取 workflow:docs/03-spec.md。
+
+已有能力规范或需要长期追踪时，按需启用 workflow:docs/capability-specs.md：捕获明确基线，
+用 spec inspect 查看原规则/新规则/场景与 AC/VT。启用任务的 Spec/Plan 受真实产物依赖门禁约束，
+未确认或漂移的基线不得绕过；普通任务不为套模板自动建立规范库。
+
 确定目标文件/仓库、关键数据流、兼容策略、错误处理和任务顺序。方案必须能映射到 Source
 和验收标准，不臆造接口、工具能力、旧数据行为或验证结果。
 

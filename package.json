@@ -6,6 +6,10 @@
   "type": "module",
   "types": "./dist/src/plugin-sdk/index.d.ts",
   "exports": {
+    "./control": {
+      "types": "./dist/src/control/index.d.ts",
+      "import": "./dist/src/control/index.js"
+    },
     ".": {
       "types": "./dist/src/plugin-sdk/index.d.ts",
       "import": "./dist/src/plugin-sdk/index.js"
@@ -40,6 +44,8 @@
     },
     "./plugins/mcp-source-provider/config.example.json": "./resources/plugins/mcp-source-provider/config.example.json",
     "./schemas/plugin-manifest.json": "./resources/schemas/plugin-manifest.schema.json",
+    "./schemas/capability-spec.json": "./resources/schemas/capability-spec.schema.json",
+    "./schemas/spec-change.json": "./resources/schemas/spec-change.schema.json",
     "./schemas/execution-event.json": "./resources/schemas/execution-event.schema.json",
     "./schemas/execution-workspace-state.json": "./resources/schemas/execution-workspace-state.schema.json",
     "./schemas/agent-executor-process.json": "./resources/schemas/agent-executor-process.schema.json",
@@ -61,7 +67,7 @@
   "scripts": {
     "test": "npm run quality:policy",
     "clean": "rimraf dist",
-    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "build": "npm run typecheck && tsdown",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "workflow:classify": "node dist/bin/agent-workflow.js classify",
     "workflow:context": "node dist/bin/agent-workflow.js context",
@@ -133,6 +139,7 @@
     "@modelcontextprotocol/client": "^2.0.0",
     "@types/node": "^20.19.43",
     "rimraf": "^6.1.3",
+    "tsdown": "0.23.7",
     "typescript": "^7.0.2"
   },
   "peerDependencies": {

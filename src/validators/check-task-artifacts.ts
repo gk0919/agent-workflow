@@ -22,6 +22,7 @@ import {
 } from '../core/verification-contract.js';
 import { errorMessage } from '../types/guards.js';
 import { validateHandoffArtifacts } from '../core/task-handoff.js';
+import { specChangeGateErrors } from '../core/spec-change.js';
 
 interface ArtifactStage {
   name: string;
@@ -497,6 +498,9 @@ const validateTask = (
   });
 
   validateLifecycle(taskId, manifestData, errors);
+  errors.push(...specChangeGateErrors(taskDirectory, stages, {
+    checkSources: manifestOverride !== null || manifestData.status !== 'complete',
+  }).map(message => `${taskId}/spec-change.json: ${message}`));
   if (hasSourceRecord) {
     validateSpec(taskId, taskDirectory, manifestData, errors);
   }

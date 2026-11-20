@@ -85,15 +85,18 @@ export const requirePublishedTask = (directory: string, inspectRepositories = fa
   return checkpoint;
 };
 
-export const taskPlanHash = (directory: string): string => {
+export const taskPlanHash = (directory: string, candidate?: ReadonlyMap<string, string>): string => {
   // Tasks adopted before the Plan stage have no plan.md yet; the projection then
   // covers spec and contract only.
-  const plan = existsSync(path.join(directory, 'plan.md')) ? planDefinitionHash(readTaskFile(directory, 'plan.md')) : '';
-  const spec = existsSync(path.join(directory, 'spec.md')) ? contentHash(readTaskFile(directory, 'spec.md')) : '';
-  const value: unknown = existsSync(path.join(directory, 'verification.json')) ? JSON.parse(readTaskFile(directory, 'verification.json')) : null;
+  const read = (file: string): string | undefined => candidate?.get(file) ?? (existsSync(path.join(directory, file)) ? readTaskFile(directory, file) : undefined);
+  const planText = read('plan.md'), specText = read('spec.md'), contractText = read('verification.json'), deltaText = read('spec-change.json');
+  const plan = planText === undefined ? '' : planDefinitionHash(planText);
+  const spec = specText === undefined ? '' : contentHash(specText);
+  const value: unknown = contractText === undefined ? null : JSON.parse(contractText);
   const contract = isJsonObject(value) ? value : {};
   const tests = Array.isArray(contract.testPoints) ? contract.testPoints.filter(isJsonObject).map(({ status: _s, evidence: _e, blocker: _b, executedAgainst: _x, capability: _c, ...definition }) => definition) : [];
-  return contentHash(JSON.stringify({ plan, spec, goals: contract.goals, acceptanceCriteria: contract.acceptanceCriteria, outOfScope: contract.outOfScope, plannedChanges: contract.plannedChanges, tests }));
+  const specChange = deltaText === undefined ? {} : { specChange: contentHash(deltaText) };
+  return contentHash(JSON.stringify({ plan, spec, ...specChange, goals: contract.goals, acceptanceCriteria: contract.acceptanceCriteria, outOfScope: contract.outOfScope, plannedChanges: contract.plannedChanges, tests }));
 };
 
 export const hasTaskApproval = (directory: string, checkpoint = readCheckpoint(directory)): boolean => Boolean(checkpoint.approval && checkpoint.approval.planHash === taskPlanHash(directory));

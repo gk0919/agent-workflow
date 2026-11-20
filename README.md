@@ -10,9 +10,14 @@
 
 业务任务先用 [`cards/source-lite.md`](./resources/cards/source-lite.md) 捕获最小事实。Pool Entry 从本地需求池/缺陷池读取，Direct Entry 直接使用用户粘贴的自包含内容；只有复杂捕获、落盘或降级时才读取 [`source-capture.md`](./docs/source-capture.md)。
 
+可信宿主的受控文件能力、异步阶段编排和固定验证执行见 [Host control](./docs/host-control.md)。
+
 ## 分发与安装
 
-包名为 `@gk0919/agent-workflow`。GitHub Actions 在 Pull Request、`main` Push、`v*` Tag 和手动触发时，先在 Node.js 20/22/24 上运行完整政策门禁，再执行 `npm pack`、安装打包结果做 CLI 冒烟检查，并上传 `.tgz` 构件；流水线不自动发布包。
+包名为 `@gk0919/agent-workflow`。GitHub Actions 在 Pull Request、`main` Push、`v*` Tag 和手动触发时，使用 Node.js 24 构建，在 Node.js 20/22/24 上运行完整政策门禁，再执行 `npm pack`、安装打包结果做 CLI 冒烟检查，并上传 `.tgz` 构件；流水线不自动发布包。
+
+源码构建使用 tsdown，需 Node.js 22.18+（22.x）、24.11+（24.x）或 26+；发布产物支持 Node.js 20+。
+`npm run build` 先执行 `tsc --noEmit` 类型检查，再输出保留目录结构的 ESM、声明文件与 Source Map，CLI、Worker 和公开入口路径保持稳定。
 
 ```sh
 # 从 Actions 下载构件后安装固定文件
@@ -299,7 +304,7 @@ agent-workflow quality:policy
   预测输入格式为 `{"version":1,"cases":[{"id":"...","promptHash":"...","facts":{}}]}`，
   不得把金标准 facts 放入发给提取器的挑战集。
 - 版本化 Git Hook 模板位于 `resources/hooks/`；宿主仓库由用户运行 `npm run quality:hooks:setup` 安装到 `.githooks/` 并接入，独立子仓库使用 `npm run quality:hooks:setup -- --repository <repository-path>`，把 `setup` 换为 `check` 可同时核对 Git 配置与模板漂移。
-- `quality:policy` 是完整工作流政策检查；GitHub Actions 在 Node.js 20/22/24 上执行类型检查和政策门禁。
+- `quality:policy` 是完整工作流政策检查；GitHub Actions 在 Node.js 24 上执行类型检查和构建，再在 Node.js 20/22/24 上检查产物。
 - 业务仓库或隔离 CI 按 [`ci-verification.md`](./docs/ci-verification.md) 产出结构化结果；`quality:policy` 校验其 Schema 和内部一致性，不代替业务测试本身。
 - 事件解绑、定时器清理等需要上下文判断的问题只发出警告，并进入 Active Profile 声明的 Review Skill。
 - 本地 Hook 只提供快速反馈；完成工作流维护后仍需显式运行 `quality:policy`。

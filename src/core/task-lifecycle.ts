@@ -462,8 +462,8 @@ export const transitionManifestContent = (
   if (command === 'reopen') {
     if (model.schemaVersion !== 2 ||
         config.routes[model.routeId]?.reopenable !== true ||
-        !['Review', 'Verify', 'Git Inspect'].includes(model.currentStage) ||
-        !['in_progress', 'blocked'].includes(model.status)) throw new Error('reopen 只支持持久标准任务的 Review/Verify/Git Inspect');
+        !['Implement', 'Review', 'Verify', 'Git Inspect'].includes(model.currentStage) ||
+        !['in_progress', 'blocked'].includes(model.status)) throw new Error('reopen 只支持持久标准任务的 Implement/Review/Verify/Git Inspect');
     const targetStage = cleanInline(to, 'Reopen stage');
     if (!['Spec', 'Plan', 'Implement', 'Review', 'Verify'].includes(targetStage) ||
         flow.stages.indexOf(targetStage) >= flow.stages.indexOf(model.currentStage)) throw new Error('reopen 必须回到更早的方案、实施或验证阶段');

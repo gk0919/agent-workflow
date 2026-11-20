@@ -100,6 +100,7 @@ export const verificationDefinitionHash = (contract: unknown, testPointId: strin
     acceptanceCriteria: definitionRecords(contract.acceptanceCriteria, ['id', 'goalIds', 'statement']),
     outOfScope: definitionRecords(contract.outOfScope, ['id', 'statement']),
     plannedChanges: definitionRecords(contract.plannedChanges, ['id', 'repository', 'path', 'summary', 'acceptanceIds']),
+    ...(contract.specChangeHash !== undefined ? { specChangeHash: contract.specChangeHash } : {}),
     testPoint: definitionRecords(matching, ['id', 'acceptanceIds', 'method', 'executor', 'instructions', 'expected'])[0],
   };
   return createHash('sha256').update(canonical(definition)).digest('hex');

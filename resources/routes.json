@@ -374,6 +374,7 @@
         "workflow:docs/01-intake.md",
         "workflow:docs/02-prd.md",
         "workflow:docs/03-spec.md",
+        "workflow:docs/capability-specs.md",
         "workflow:docs/04-plan.md",
         "workflow:docs/verification-contract.md#标准流程",
         "workflow:docs/05-execution.md",
@@ -416,6 +417,7 @@
           "taskStages": ["Spec", "Plan"],
           "references": [
             "workflow:docs/03-spec.md",
+            "workflow:docs/capability-specs.md",
             "workflow:docs/04-plan.md",
             "workflow:docs/verification-contract.md#标准流程",
             "workflow:docs/12-artifacts.md#默认保存策略",
@@ -517,6 +519,7 @@
         "workflow:docs/01-intake.md",
         "workflow:docs/02-prd.md",
         "workflow:docs/03-spec.md",
+        "workflow:docs/capability-specs.md",
         "workflow:docs/04-plan.md",
         "workflow:docs/verification-contract.md#标准流程",
         "workflow:docs/05-execution.md",
@@ -559,6 +562,7 @@
           "taskStages": ["Spec"],
           "references": [
             "workflow:docs/03-spec.md",
+            "workflow:docs/capability-specs.md",
             "workflow:docs/04-plan.md",
             "workflow:docs/verification-contract.md#标准流程",
             "workflow:docs/12-artifacts.md#默认保存策略",
@@ -575,6 +579,7 @@
           "taskStages": ["Design Review"],
           "references": [
             "workflow:docs/03-spec.md",
+            "workflow:docs/capability-specs.md",
             "workflow:docs/04-plan.md"
           ],
           "next": "比较候选方案与被否决理由、兼容与回滚策略，等待用户批准"
@@ -682,6 +687,7 @@
         "workflow:docs/source-capture.md#direct-entry",
         "workflow:docs/02-prd.md",
         "workflow:docs/03-spec.md",
+        "workflow:docs/capability-specs.md",
         "workflow:docs/04-plan.md",
         "workflow:docs/05-execution.md",
         "workflow:docs/06-review.md",
@@ -722,6 +728,7 @@
             "workflow:docs/13-level-4.md#架构评审",
             "workflow:docs/13-level-4.md#里程碑",
             "workflow:docs/03-spec.md",
+            "workflow:docs/capability-specs.md",
             "workflow:docs/verification-contract.md#标准流程"
           ],
           "next": "提交不变量、契约与边界、里程碑划分和验证项，等待用户批准"

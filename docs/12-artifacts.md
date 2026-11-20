@@ -43,6 +43,9 @@
 `checkpoint.json`、`history/`、`verification-start/` 和 `manifest-legacy.md` 只属于持久任务，
 由 CLI 维护，见 [`持久任务`](#持久任务persistent)。
 
+按需启用 [能力基线与任务增量](./capability-specs.md) 时，任务额外保存 `spec-change.json`，
+由现有 checkpoint/history 捕获；长期基线单独保存在工作区，不属于自动任务归档或自动 Git 提交范围。
+
 `task-id` 推荐格式：
 
 ```text

@@ -20,6 +20,16 @@ Goal (G)
 - `passed` / `failed` 必须有证据；`blocked` / `not-applicable` 必须有原因。
 - 未运行的命令、MCP、浏览器或人工场景不得写成已通过。
 
+Spec 的行为需求沿用 AC ID，场景描述该 AC 在具体条件下的可观察结果，并引用 VT ID。
+一个 AC 可有多个场景，一个 VT 可覆盖多个场景，但其 instructions / expected 必须说明覆盖结果。
+不新增重复的需求、场景状态或测试结果字段：`spec.md` 承载场景细节，结构化定义与真实执行状态
+仍以本契约为准。ADDED / MODIFIED / REMOVED 表达相对已有行为的本次变化，不是新生命周期。
+Review 核对场景完整性和设计依据，Verify 核对执行证据；Schema 通过不能证明需求语义正确。
+
+启用 [能力基线与任务增量](./capability-specs.md) 的任务在版本 2 中填写可选 `specChangeHash`
+（当前 spec-change.json 字节的 SHA-256）。它参与各 VT 的 definitionHash；增量变化后旧证据失效，
+必须更新定义并重新验证。未启用的历史契约不需要该字段，原有定义哈希保持兼容。
+
 ## 标准流程
 
 正式 Spec 创建 `.agent-workflow/tasks/local/<task-id>/verification.json`，并在 `spec.md`
@@ -94,6 +104,9 @@ CI 证据沿用现有公开契约，通过证据文件哈希、`check ID` 和 `c
 | `ci` | 隔离 CI 的构建、测试和 smoke 结果 |
 | `manual` | 业务语义、视觉、真实权限或真实数据人工验收 |
 | `not-verifiable` | 当前环境无法验证且必须说明原因 |
+
+规划时 `not-verifiable` 可保持 `planned`，在 instructions 中说明限制，不得预写执行结果。
+由可信人工/runner 收口为 `blocked` / `not-applicable` 时必须记录原因；它不能标为 passed/failed。
 
 `executor` 使用 `agent`、`human` 或 `ci`。`manual` 必须由 `human` 执行，`ci`
 必须由 `ci` 执行；MCP 由 `agent` 执行。

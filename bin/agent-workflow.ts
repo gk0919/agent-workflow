@@ -58,6 +58,7 @@ const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   route: command('dist/src/core/route.js'),
   next: command('dist/src/core/workflow-next.js'),
   context: command('dist/src/core/context-check.js'),
+  spec: command('dist/src/core/spec-cli.js'),
   'verify:ci': command('dist/src/core/ci-verification.js'),
   'verify:ci:test': command('dist/tests/contract/ci-verification-regression.js'),
   'verify:contract': command('dist/src/core/verification-contract.js'),

@@ -377,8 +377,8 @@ const validateTestPoint = (
     errors.push(`${label}: 非 MCP 验证不得包含 capability`);
   }
   if (method === 'not-verifiable' &&
-      !['blocked', 'not-applicable'].includes(status)) {
-    errors.push(`${label}: not-verifiable 只能标记为 blocked 或 not-applicable`);
+      !['planned', 'blocked', 'not-applicable'].includes(status)) {
+    errors.push(`${label}: not-verifiable 只能标记为 planned、blocked 或 not-applicable`);
   }
 };
 
@@ -404,6 +404,7 @@ export const validateVerificationContract = (
       'plannedChanges',
       'actualChanges',
       'testPoints',
+      ...(record.schemaVersion === 2 ? ['specChangeHash'] : []),
     ],
     'contract',
     errors,
