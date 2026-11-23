@@ -18,10 +18,6 @@
       "types": "./dist/src/contracts/index.d.ts",
       "import": "./dist/src/contracts/index.js"
     },
-    "./execution": {
-      "types": "./dist/src/execution/index.d.ts",
-      "import": "./dist/src/execution/index.js"
-    },
     "./plugin-sdk": {
       "types": "./dist/src/plugin-sdk/index.d.ts",
       "import": "./dist/src/plugin-sdk/index.js"
@@ -46,13 +42,6 @@
     "./schemas/plugin-manifest.json": "./resources/schemas/plugin-manifest.schema.json",
     "./schemas/capability-spec.json": "./resources/schemas/capability-spec.schema.json",
     "./schemas/spec-change.json": "./resources/schemas/spec-change.schema.json",
-    "./schemas/execution-event.json": "./resources/schemas/execution-event.schema.json",
-    "./schemas/execution-workspace-state.json": "./resources/schemas/execution-workspace-state.schema.json",
-    "./schemas/agent-executor-process.json": "./resources/schemas/agent-executor-process.schema.json",
-    "./schemas/fake-executor-fixture.json": "./resources/schemas/fake-executor-fixture.schema.json",
-    "./schemas/workflow-definition.json": "./resources/schemas/workflow-definition.schema.json",
-    "./schemas/workflow-definition-bundle.json": "./resources/schemas/workflow-definition-bundle.schema.json",
-    "./schemas/workflow-transition.json": "./resources/schemas/workflow-transition.schema.json",
     "./schemas/workflow-config.json": "./resources/schemas/workflow-config.schema.json",
     "./schemas/handoff-state.json": "./resources/schemas/handoff-state.schema.json",
     "./package.json": "./package.json"
@@ -71,23 +60,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "workflow:classify": "node dist/bin/agent-workflow.js classify",
     "workflow:context": "node dist/bin/agent-workflow.js context",
-    "workflow:execution:plan": "node dist/bin/agent-workflow.js execution:plan",
-    "workflow:execution:adaptive:preview": "node dist/bin/agent-workflow.js execution:adaptive:preview",
-    "workflow:execution:adaptive:run": "node dist/bin/agent-workflow.js execution:adaptive:run",
-    "workflow:execution:adaptive:test": "node dist/bin/agent-workflow.js execution:adaptive:test",
-    "workflow:execution:author:preview": "node dist/bin/agent-workflow.js execution:author:preview",
-    "workflow:execution:author:save": "node dist/bin/agent-workflow.js execution:author:save",
-    "workflow:execution:author:migrate": "node dist/bin/agent-workflow.js execution:author:migrate",
-    "workflow:execution:author:run": "node dist/bin/agent-workflow.js execution:author:run",
-    "workflow:execution:author:test": "node dist/bin/agent-workflow.js execution:author:test",
-    "workflow:execution:run": "node dist/bin/agent-workflow.js execution:run",
-    "workflow:execution:resume": "node dist/bin/agent-workflow.js execution:resume",
-    "workflow:execution:pause": "node dist/bin/agent-workflow.js execution:pause",
-    "workflow:execution:cancel": "node dist/bin/agent-workflow.js execution:cancel",
-    "workflow:execution:parallel:run": "node dist/bin/agent-workflow.js execution:parallel:run",
-    "workflow:execution:parallel:resume": "node dist/bin/agent-workflow.js execution:parallel:resume",
-    "workflow:execution:portability:test": "node dist/bin/agent-workflow.js execution:portability:test",
-    "workflow:execution:writable:test": "node dist/bin/agent-workflow.js execution:writable:test",
     "workflow:feedback": "node dist/bin/agent-workflow.js feedback",
     "workflow:init": "node dist/bin/agent-workflow.js init",
     "workflow:init:test": "node dist/bin/agent-workflow.js init:test",

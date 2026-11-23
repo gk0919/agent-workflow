@@ -1,10 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, unlinkSync, writeFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
-import { serializeCanonicalJson } from '../core/execution-plan.js';
 
 export interface PendingOperation { id: string; kind: string; startedAt: string; retryToken?: string }
 interface Receipt { result?: unknown; error?: string; retryToken?: string }
+
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonicalize(record[key])]));
+  }
+  return value;
+};
 
 /** Host-only receipts live in ignored runtime storage, outside task and approval baselines.
  * A pending marker survives a crash. It never authorizes retrying an uncertain side effect.
@@ -25,7 +33,7 @@ export class ControlOperations {
   }
   run<T>(kind: string, input: unknown, execute: () => T, retryToken?: string): T {
     this.replayed = false;
-    const id = createHash('sha256').update(serializeCanonicalJson({ kind, input })).digest('hex');
+    const id = createHash('sha256').update(JSON.stringify(canonicalize({ kind, input }))).digest('hex');
     const file = path.join(this.directory, `${id}.json`);
     if (this.pending()) throw new Error('Uncertain operation remains; inspect status/diff and use human recover after reconciliation');
     if (existsSync(file)) {

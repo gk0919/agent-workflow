@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -31,34 +30,7 @@ export const main = (): number => {
     assert.equal(help.status, 0);
     assert.match(help.stdout, /Usage: agent-workflow <command>/);
     assert.match(help.stdout, /\n  init\n/);
-    assert.match(help.stdout, /\n  execution:plan\n/);
-    assert.match(help.stdout, /\n  execution:author:preview\n/);
-    assert.match(help.stdout, /\n  execution:author:run\n/);
-    assert.match(help.stdout, /\n  execution:author:test\n/);
-    assert.match(help.stdout, /\n  execution:adaptive:preview\n/);
-    assert.match(help.stdout, /\n  execution:adaptive:run\n/);
-    assert.match(help.stdout, /\n  execution:adaptive:test\n/);
-    assert.match(help.stdout, /\n  execution:run\n/);
-    assert.match(help.stdout, /\n  execution:parallel:run\n/);
-    assert.match(help.stdout, /\n  execution:portability:test\n/);
-    assert.match(help.stdout, /\n  execution:writable:test\n/);
     assert.match(help.stdout, /quality:policy/);
-
-    const standalonePlanHelp = runCli(['execution:plan', '--help'], tmpdir());
-    assert.equal(standalonePlanHelp.status, 0, standalonePlanHelp.stderr);
-    assert.match(standalonePlanHelp.stdout, /workspace-relative-json/);
-    const standaloneRunHelp = runCli(['execution:run', '--help'], tmpdir());
-    assert.equal(standaloneRunHelp.status, 0, standaloneRunHelp.stderr);
-    assert.match(standaloneRunHelp.stdout, /execution:resume/);
-    assert.match(standaloneRunHelp.stdout, /--scheduler serial\|parallel/);
-    const standaloneAuthorHelp = runCli(['execution:author:preview', '--help'], tmpdir());
-    assert.equal(standaloneAuthorHelp.status, 0, standaloneAuthorHelp.stderr);
-    assert.match(standaloneAuthorHelp.stdout, /execution:author:preview/);
-    assert.match(standaloneAuthorHelp.stdout, /execution:author:migrate/);
-    const standaloneAdaptiveHelp = runCli(['execution:adaptive:preview', '--help'], tmpdir());
-    assert.equal(standaloneAdaptiveHelp.status, 0, standaloneAdaptiveHelp.stderr);
-    assert.match(standaloneAdaptiveHelp.stdout, /execution:adaptive:preview/);
-    assert.match(standaloneAdaptiveHelp.stdout, /execution:adaptive:run/);
 
     const unknown = runCli(['unknown-command']);
     assert.equal(unknown.status, 1);

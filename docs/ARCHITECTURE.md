@@ -58,20 +58,4 @@ Project Tasks / Runtime
 - 新规则：通用阶段规则放 Core/卡片，项目规范放项目 Skill，机械检查放 Validator。
 - 新持久化格式：先更新 Schema、迁移说明和契约测试，再开放 CLI 行为。
 
-## 多 Agent 执行层
-
-Route、Task、Plugin、Worktree 和 Verification 属于工作流控制面。已实现的执行层采用声明式
-Workflow IR、可替换 Agent Executor、持久化 Execution Journal、有界并发、原生宿主 Adapter、
-独立进程协议，以及基于显式 effect/Approval 的隔离 Worktree 写入与 Integrator；它不改变现有
-Route 与任务阶段的事实源地位，也不在 Core 中绑定单一宿主。当前已完成 Phase 0-6；动态
-Workflow 作者入口只生成和校验声明式 IR，Adaptive Runtime 只在 Checkpoint 间启动批准的子 Run。
-
-目标架构、不变量、公共契约边界、风险控制和分阶段退出标准见
-[`MULTI-AGENT-EXECUTION-KERNEL.md`](./MULTI-AGENT-EXECUTION-KERNEL.md)，宿主接入见
-[`EXECUTOR-PORTABILITY.md`](./EXECUTOR-PORTABILITY.md)，可写执行边界见
-[`WRITABLE-EXECUTION.md`](./WRITABLE-EXECUTION.md)，动态作者入口见
-[`DYNAMIC-WORKFLOW-AUTHORING.md`](./DYNAMIC-WORKFLOW-AUTHORING.md)，自适应运行时见
-[`ADAPTIVE-WORKFLOW-RUNTIME.md`](./ADAPTIVE-WORKFLOW-RUNTIME.md)。未标记完成并通过契约测试的后续阶段能力
-仍视为 Proposed，不得写入 Adapter 或用户文档冒充现有实现。
-
 接入步骤见 [`PORTABILITY.md`](./PORTABILITY.md)。

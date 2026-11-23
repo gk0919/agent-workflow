@@ -14,10 +14,8 @@ import {
   WorkflowPluginRuntime,
 } from '../../src/host-node/index.js';
 import {
-  agentExecutorService,
   definePlugin,
   defineService,
-  executionWorkspaceService,
   sourceProviderService,
 } from '../../src/plugin-sdk/index.js';
 import { loadWorkflowConfig, validateWorkflowConfig } from '../../src/config/workflow-config.js';
@@ -322,19 +320,7 @@ const packageBoundaryContract = (): void => {
     readFileSync(path.join(workflowRoot, 'package.json'), 'utf8'),
   ) as { exports: Record<string, unknown> };
   const exportKeys = Object.keys(packageJson.exports);
-  assert.equal(agentExecutorService.id, 'workflow/agent-executor');
-  assert.ok(agentExecutorService.multiple);
-  assert.equal(executionWorkspaceService.id, 'workflow/execution-workspace');
-  assert.equal(executionWorkspaceService.permission, 'workspace:write');
-  assert.ok(exportKeys.includes('./execution'));
   assert.ok(exportKeys.includes('./plugins/mcp-source-provider'));
-  assert.ok(exportKeys.includes('./schemas/execution-event.json'));
-  assert.ok(exportKeys.includes('./schemas/execution-workspace-state.json'));
-  assert.ok(exportKeys.includes('./schemas/agent-executor-process.json'));
-  assert.ok(exportKeys.includes('./schemas/fake-executor-fixture.json'));
-  assert.ok(exportKeys.includes('./schemas/workflow-definition.json'));
-  assert.ok(exportKeys.includes('./schemas/workflow-definition-bundle.json'));
-  assert.ok(exportKeys.includes('./schemas/workflow-transition.json'));
   assert.ok(exportKeys.every((key) => !key.startsWith('./examples/')));
 };
 

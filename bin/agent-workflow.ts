@@ -26,26 +26,6 @@ const command = (script: string, prefixArguments: string[] = []): CommandTarget 
 });
 const COMMANDS: Readonly<Record<string, CommandTarget>> = Object.freeze({
   'cli:test': command('dist/tests/contract/cli-regression.js'),
-  'execution:plan': command('dist/src/core/execution-plan.js'),
-  'execution:adaptive:preview': command('dist/src/execution/adaptive-cli.js', ['preview']),
-  'execution:adaptive:run': command('dist/src/execution/adaptive-cli.js', ['run']),
-  'execution:adaptive:test': command('dist/tests/contract/adaptive-runtime-regression.js'),
-  'execution:author:migrate': command('dist/src/execution/authoring-cli.js', ['migrate']),
-  'execution:author:preview': command('dist/src/execution/authoring-cli.js', ['preview']),
-  'execution:author:run': command('dist/src/execution/cli.js', ['approved-run']),
-  'execution:author:save': command('dist/src/execution/authoring-cli.js', ['save']),
-  'execution:author:test': command('dist/tests/contract/workflow-authoring-regression.js'),
-  'execution:run': command('dist/src/execution/cli.js', ['run']),
-  'execution:resume': command('dist/src/execution/cli.js', ['resume']),
-  'execution:pause': command('dist/src/execution/cli.js', ['pause']),
-  'execution:cancel': command('dist/src/execution/cli.js', ['cancel']),
-  'execution:parallel:run': command('dist/src/execution/cli.js', ['run', '--scheduler', 'parallel']),
-  'execution:parallel:resume': command('dist/src/execution/cli.js', ['resume', '--scheduler', 'parallel']),
-  'execution:parallel:test': command('dist/tests/contract/parallel-runner-regression.js'),
-  'execution:portability:test': command('dist/tests/contract/executor-portability-regression.js'),
-  'execution:writable:test': command('dist/tests/contract/writable-workspace-regression.js'),
-  'execution:runner:test': command('dist/tests/contract/serial-runner-regression.js'),
-  'execution:test': command('dist/tests/contract/execution-plan-regression.js'),
   init: command('dist/src/cli/init.js'),
   'init:test': command('dist/tests/contract/init-regression.js'),
   setup: command('dist/src/cli/setup.js'),
@@ -157,9 +137,8 @@ const main = async (): Promise<number> => {
   };
 
   // Init precedes workspace configuration; setup and plugin checks own their lifecycle.
-  // Execution commands own their explicit executor lifecycle and never activate ambient plugins.
   if (commandName === 'init' || commandName === 'setup' || commandName === 'source:capture' ||
-      commandName.startsWith('execution:') || commandName.startsWith('plugins:')) {
+      commandName.startsWith('plugins:')) {
     return runCommand();
   }
   try {

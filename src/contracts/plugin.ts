@@ -7,8 +7,6 @@ export const PLUGIN_API_VERSION = 1 as const;
 export const PLUGIN_CAPABILITIES = [
   'source-provider',
   'agent-adapter',
-  'agent-executor',
-  'execution-workspace',
   'context-provider',
   'validator',
   'route-extension',
@@ -24,8 +22,6 @@ export type PluginCapability = typeof PLUGIN_CAPABILITIES[number];
 /** Canonical service ids for capabilities with an executable v1 contract. */
 export const STANDARD_PLUGIN_SERVICES = Object.freeze({
   'agent-adapter': 'workflow/agent-adapter',
-  'agent-executor': 'workflow/agent-executor',
-  'execution-workspace': 'workflow/execution-workspace',
   'approval-provider': 'workflow/approval-provider',
   'artifact-store': 'workflow/artifact-store',
   'context-provider': 'workflow/context-provider',
